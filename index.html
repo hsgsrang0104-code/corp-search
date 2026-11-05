@@ -19,11 +19,11 @@
     <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6 space-y-4">
         <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">법인상호 (선택 또는 필수)</label>
-            <input type="text" id="corpNameInput" placeholder="예: 투어라운지" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+            <input type="text" id="corpNameInput" placeholder="예: 투어라운지 또는 주식회사 투어라운지" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
         </div>
         <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">소재지 주소 (선택/시·구·동)</label>
-            <input type="text" id="addressInput" placeholder="예: 대전광역시 서구 둔산로" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+            <input type="text" id="addressInput" placeholder="예: 대전광역시 서구 대덕대로" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
         </div>
         <button onclick="searchCompany()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow">
             조회하기
@@ -71,7 +71,7 @@
         const API_KEY = "dbc8f97a8eb1093b6b8ec7a0c664e3d01f2a3a33720f2d373a7bf91314fb15";
 
         async function searchCompany() {
-            const corpName = document.getElementById('corpNameInput').value.trim();
+            let corpName = document.getElementById('corpNameInput').value.trim();
             const addressQuery = document.getElementById('addressInput').value.trim();
 
             if (!corpName && !addressQuery) {
@@ -86,26 +86,36 @@
             document.getElementById('searchBtn').disabled = true;
 
             try {
-                // 금융위원회 기업기본정보 API 호출 (상호명 우선 검색, 없으면 전체 혹은 주소 필터링)
-                let fscUrl = `https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpBsInfo_V2?serviceKey=${API_KEY}&numOfRows=10&pageNo=1&resultType=json`;
+                // '주식회사' 등의 단어가 포함된 경우 검색 성공률을 높이기 위해 핵심 단어 추출 시도 또는 원본 동시 활용
+                let searchName = corpName.replace(/주식회사|\(주\)|(주)/g, "").trim();
+                if (!searchName) searchName = corpName; // 전부 지워졌으면 원본 유지
+
+                let fscUrl = `https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpBsInfo_V2?serviceKey=${API_KEY}&numOfRows=20&pageNo=1&resultType=json`;
                 
-                if (corpName) {
-                    fscUrl += `&corpNm=${encodeURIComponent(corpName)}`;
+                if (searchName) {
+                    fscUrl += `&corpNm=${encodeURIComponent(searchName)}`;
                 }
 
                 const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fscUrl)}`;
                 
                 const response = await fetch(proxyUrl);
-                const data = await response.json();
+                const rawText = await response.text();
+                
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                } catch (e) {
+                    throw new Error("API 응답 파싱 실패");
+                }
 
                 const items = data?.response?.body?.items?.item;
                 if (!items || items.length === 0) {
                     throw new Error("기업 정보를 찾을 수 없습니다.");
                 }
 
-                // 배열 또는 단일 객체 처리 및 주소 조건 매칭 필터링
                 let companyList = Array.isArray(items) ? items : [items];
                 
+                // 주소 조건이 입력된 경우 필터링
                 if (addressQuery) {
                     const filtered = companyList.filter(item => {
                         const addr = item.enpRprFndnAddr || item.refineRoadnmAddr || "";
