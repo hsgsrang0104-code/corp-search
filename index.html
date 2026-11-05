@@ -12,14 +12,18 @@
     <!-- 상단 타이틀 영역 -->
     <div class="w-full max-w-md bg-blue-600 text-white rounded-xl p-4 shadow-md text-center mb-6">
         <h1 class="text-xl font-bold">🏢 모바일 법인 정보 조회</h1>
-        <p class="text-xs text-blue-100 mt-1">공공데이터 실시간 연동 서비스</p>
+        <p class="text-xs text-blue-100 mt-1">상호 및 주소 통합 실시간 조회</p>
     </div>
 
     <!-- 검색 입력 폼 -->
-    <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6">
-        <div class="mb-4">
-            <label class="block text-sm font-semibold text-gray-700 mb-1">법인상호 (필수)</label>
+    <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6 space-y-4">
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">법인상호 (선택 또는 필수)</label>
             <input type="text" id="corpNameInput" placeholder="예: 투어라운지" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">소재지 주소 (선택/시·구·동)</label>
+            <input type="text" id="addressInput" placeholder="예: 대전광역시 서구 둔산로" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
         </div>
         <button onclick="searchCompany()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow">
             조회하기
@@ -60,7 +64,7 @@
 
     <!-- 에러/안내 메시지 영역 -->
     <div id="errorContainer" class="w-full max-w-md bg-red-50 text-red-700 p-4 rounded-xl shadow-md hidden text-sm text-center">
-        조회된 결과가 없거나 공공데이터 연동 중 오류가 발생했습니다. 정확한 상호명을 입력해 주세요.
+        조회된 결과가 없거나 입력하신 조건에 맞는 기업을 찾지 못했습니다. 상호나 주소를 다시 확인해 주세요.
     </div>
 
     <script>
@@ -68,8 +72,10 @@
 
         async function searchCompany() {
             const corpName = document.getElementById('corpNameInput').value.trim();
-            if (!corpName) {
-                alert("조회할 법인상호를 입력해주세요.");
+            const addressQuery = document.getElementById('addressInput').value.trim();
+
+            if (!corpName && !addressQuery) {
+                alert("법인상호 또는 소재지 주소 중 하나 이상을 입력해주세요.");
                 return;
             }
 
@@ -80,11 +86,13 @@
             document.getElementById('searchBtn').disabled = true;
 
             try {
-                // 1. 금융위원회 기업기본정보 API 호출 (법인명 검색)
-                // 브라우저 CORS 우회를 위해 프록시 서버 경유 또는 표준 엔드포인트 호출
-                const fscUrl = `https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpBsInfo_V2?serviceKey=${API_KEY}&numOfRows=1&pageNo=1&resultType=json&corpNm=${encodeURIComponent(corpName)}`;
+                // 금융위원회 기업기본정보 API 호출 (상호명 우선 검색, 없으면 전체 혹은 주소 필터링)
+                let fscUrl = `https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpBsInfo_V2?serviceKey=${API_KEY}&numOfRows=10&pageNo=1&resultType=json`;
                 
-                // CORS 프록시 활용 (정적 웹 호스팅 환경 대응)
+                if (corpName) {
+                    fscUrl += `&corpNm=${encodeURIComponent(corpName)}`;
+                }
+
                 const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fscUrl)}`;
                 
                 const response = await fetch(proxyUrl);
@@ -95,17 +103,28 @@
                     throw new Error("기업 정보를 찾을 수 없습니다.");
                 }
 
-                const company = Array.isArray(items) ? items[0] : items;
+                // 배열 또는 단일 객체 처리 및 주소 조건 매칭 필터링
+                let companyList = Array.isArray(items) ? items : [items];
+                
+                if (addressQuery) {
+                    const filtered = companyList.filter(item => {
+                        const addr = item.enpRprFndnAddr || item.refineRoadnmAddr || "";
+                        return addr.includes(addressQuery);
+                    });
+                    if (filtered.length > 0) {
+                        companyList = filtered;
+                    }
+                }
+
+                const company = companyList[0];
                 
                 const bizNo = company.bizno || "-";
                 const corpNo = company.crno || "-";
                 const address = company.enpRprFndnAddr || company.refineRoadnmAddr || "주소 정보 없음";
                 const name = company.corpNm || corpName;
-                
-                // 전화번호가 없는 경우 보조 검색 결과 안내 (블로그/포털 검색 연동 영역)
-                let phone = company.enpTlno || company.telNo || "전화번호 미공개 (포털 검색 보완 필요)";
+                const phone = company.enpTlno || company.telNo || "전화번호 미공개 (포털 검색 보완 필요)";
 
-                // 2. 국세청 사업자 상태조회 API 연동 (사업자번호가 있는 경우)
+                // 국세청 사업자 상태조회 API 연동
                 let bizStatus = "계속사업자";
                 let badgeClass = "bg-green-100 text-green-700";
 
@@ -128,7 +147,7 @@
                             }
                         }
                     } catch (e) {
-                        console.log("국세청 상태조회 스킵 또는 예외 발생", e);
+                        console.log("국세청 상태조회 예외 발생", e);
                     }
                 }
 
