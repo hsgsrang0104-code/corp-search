@@ -40,6 +40,7 @@
         <div id="resultCard" class="hidden mt-4 bg-white p-4 rounded-xl shadow-sm space-y-3 border-l-4 border-blue-600">
             <div class="flex justify-between items-center border-b pb-2">
                 <h2 id="resName" class="font-bold text-base text-slate-800">법인명</h2>
+                <!-- 상태 배지 (계속사업자 / 폐업 등 동적 표시) -->
                 <span id="resStatus" class="px-2 py-0.5 text-xs rounded-full font-medium bg-emerald-100 text-emerald-700">계속사업자</span>
             </div>
             <div class="text-xs space-y-2 text-slate-600">
@@ -82,17 +83,25 @@
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('resultCard').classList.add('hidden');
 
-            // 가상 API 조회 시뮬레이션 (추후 실제 공공 API 연동 가능)
+            // 가상 API 조회 시뮬레이션 (상세 번호 및 전체 주소 반영)
             setTimeout(() => {
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('resultCard').classList.remove('hidden');
 
-                // 테스트 데이터 바인딩
+                // 마스킹 없는 전체 정보 바인딩
                 document.getElementById('resName').innerText = name;
-                document.getElementById('resBizNo').innerText = '123-81-*****';
-                document.getElementById('resCorpNo').innerText = '110111-*******';
-                document.getElementById('resPhone').innerText = '042-***-****';
-                document.getElementById('resAddr').innerText = addr ? addr + ' (조회 주소)' : '대전광역시 서구 둔산동';
+                document.getElementById('resBizNo').innerText = '314-81-58291';
+                document.getElementById('resCorpNo').innerText = '160111-0048291';
+                document.getElementById('resPhone').innerText = '042-471-8920';
+                
+                // 주소가 입력된 경우 상세 주소까지 전체 표출, 미입력시 기본 풀 주소 표출
+                const fullAddress = addr ? addr + ' 123번길 45, 타임빌딩 3층 301호' : '대전광역시 서구 둔산로 100, 대영빌딩 22층 2202호 (둔산동)';
+                document.getElementById('resAddr').innerText = fullAddress;
+
+                // 폐업여부 상태 (예시: 정상 기업은 '계속사업자', 필요시 변경 가능)
+                const statusEl = document.getElementById('resStatus');
+                statusEl.innerText = '계속사업자';
+                statusEl.className = 'px-2 py-0.5 text-xs rounded-full font-medium bg-emerald-100 text-emerald-700';
             }, 800);
         }
     </script>
