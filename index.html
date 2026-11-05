@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>기업 실시간 폐업 조회</title>
+    <title>기업 정보 검색</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-4">
 
     <div class="w-full max-w-md bg-blue-600 text-white rounded-xl p-4 shadow-md text-center mb-6">
-        <h1 class="text-xl font-bold">🏢 기업 상태 실시간 조회 시스템</h1>
-        <p class="text-xs text-blue-100 mt-1">상호명 기반 검색 및 국세청 폐업 여부 대사</p>
+        <h1 class="text-xl font-bold">🏢 기업 정보 검색 시스템</h1>
+        <p class="text-xs text-blue-100 mt-1">상호명 및 주소 기반 핵심 정보 조회</p>
     </div>
 
     <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6 space-y-4">
@@ -29,34 +29,32 @@
 
     <div id="loading" class="hidden text-center py-6">
         <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-        <p class="text-xs text-gray-500 mt-2">기업 정보 및 국세청 상태 조회 중...</p>
+        <p class="text-xs text-gray-500 mt-2">기업 정보를 검색하고 있습니다...</p>
     </div>
 
+    <!-- 결과 영역: 주소, 전화번호, 대표자 중심 -->
     <div id="resultContainer" class="w-full max-w-md bg-white rounded-xl p-5 shadow-md hidden border-l-4 border-blue-600 space-y-4">
         <div class="flex justify-between items-center border-b pb-3">
-            <div>
-                <h2 id="resCorpName" class="text-lg font-bold text-gray-800">기업명</h2>
-                <p id="resAddress" class="text-xs text-gray-500 mt-0.5">주소</p>
-            </div>
-            <span id="resStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-700">상태확인</span>
+            <h2 id="resCorpName" class="text-lg font-bold text-gray-800">기업명</h2>
+            <span id="resStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-700">조회완료</span>
         </div>
 
-        <div class="space-y-2.5 text-sm">
+        <div class="space-y-3 text-sm">
+            <div class="flex justify-between items-start">
+                <span class="text-gray-500 font-medium">주소</span>
+                <span id="resAddress" class="font-medium text-gray-800 text-right max-w-[240px]">-</span>
+            </div>
             <div class="flex justify-between">
-                <span class="text-gray-500">대표자</span>
+                <span class="text-gray-500 font-medium">전화번호</span>
+                <span id="resPhone" class="font-medium text-gray-800">-</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500 font-medium">대표자</span>
                 <span id="resCeo" class="font-medium text-gray-800">-</span>
             </div>
             <div class="flex justify-between">
-                <span class="text-gray-500">사업자등록번호</span>
+                <span class="text-gray-500 font-medium">사업자등록번호</span>
                 <span id="resBizNo" class="font-medium text-gray-800">-</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">과세 유형</span>
-                <span id="resTaxType" class="font-medium text-gray-800">-</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">폐업일자 (해당시)</span>
-                <span id="resEndDate" class="font-medium text-gray-800">-</span>
             </div>
         </div>
     </div>
@@ -85,24 +83,9 @@
 
                 document.getElementById('resCorpName').innerText = data.corpName;
                 document.getElementById('resAddress').innerText = data.address;
+                document.getElementById('resPhone').innerText = data.phone;
                 document.getElementById('resCeo').innerText = data.ceoNm;
                 document.getElementById('resBizNo').innerText = data.bizno;
-                document.getElementById('resTaxType').innerText = data.taxType;
-                document.getElementById('resEndDate').innerText = data.endDate;
-
-                const badge = document.getElementById('resStatusBadge');
-                const status = data.bizStatus; // "계속사업자", "폐업자" 등
-                badge.innerText = status;
-                
-                if (status.includes('폐업')) {
-                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-red-100 text-red-700';
-                } else if (status.includes('휴업')) {
-                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-yellow-100 text-yellow-700';
-                } else if (status.includes('계속')) {
-                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700';
-                } else {
-                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-700';
-                }
 
                 document.getElementById('resultContainer').classList.remove('hidden');
             } catch (e) {
