@@ -12,28 +12,28 @@
     <!-- 상단 타이틀 영역 -->
     <div class="w-full max-w-md bg-blue-600 text-white rounded-xl p-4 shadow-md text-center mb-6">
         <h1 class="text-xl font-bold">🏢 모바일 법인 정보 조회</h1>
-        <p class="text-xs text-blue-100 mt-1">상호 및 주소 통합 실시간 조회</p>
+        <p class="text-xs text-blue-100 mt-1">스마트 유연 검색 시스템</p>
     </div>
 
     <!-- 검색 입력 폼 -->
     <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6 space-y-4">
         <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">법인상호 (선택 또는 필수)</label>
-            <input type="text" id="corpNameInput" placeholder="예: 투어라운지 또는 주식회사 투어라운지" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">법인상호 (필수 또는 핵심 키워드)</label>
+            <input type="text" id="corpNameInput" placeholder="예: 투어라운지" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
         </div>
         <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">소재지 주소 (선택/시·구·동)</label>
-            <input type="text" id="addressInput" placeholder="예: 대전광역시 서구 대덕대로" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+            <input type="text" id="addressInput" placeholder="예: 대전 또는 둔산로 (선택사항)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
         </div>
         <button onclick="searchCompany()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow">
-            조회하기
+            스마트 조회하기
         </button>
     </div>
 
     <!-- 로딩 상태 표시 -->
     <div id="loading" class="hidden text-center py-6">
         <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-        <p class="text-xs text-gray-500 mt-2">공공데이터 서버에서 정보를 조회하고 있습니다...</p>
+        <p class="text-xs text-gray-500 mt-2">공공데이터를 유연하게 탐색하고 있습니다...</p>
     </div>
 
     <!-- 결과 출력 영역 -->
@@ -64,40 +64,39 @@
 
     <!-- 에러/안내 메시지 영역 -->
     <div id="errorContainer" class="w-full max-w-md bg-red-50 text-red-700 p-4 rounded-xl shadow-md hidden text-sm text-center">
-        조회된 결과가 없거나 입력하신 조건에 맞는 기업을 찾지 못했습니다. 상호나 주소를 다시 확인해 주세요.
+        일치하는 기업을 찾지 못했습니다. 상호의 핵심 단어만 입력해 보거나 주소를 함께 입력해 보세요.
     </div>
 
     <script>
         const API_KEY = "dbc8f97a8eb1093b6b8ec7a0c664e3d01f2a3a33720f2d373a7bf91314fb15";
 
         async function searchCompany() {
-            let corpName = document.getElementById('corpNameInput').value.trim();
+            const rawCorpName = document.getElementById('corpNameInput').value.trim();
             const addressQuery = document.getElementById('addressInput').value.trim();
 
-            if (!corpName && !addressQuery) {
+            if (!rawCorpName && !addressQuery) {
                 alert("법인상호 또는 소재지 주소 중 하나 이상을 입력해주세요.");
                 return;
             }
 
-            // UI 초기화
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('resultContainer').classList.add('hidden');
             document.getElementById('errorContainer').classList.add('hidden');
             document.getElementById('searchBtn').disabled = true;
 
             try {
-                // '주식회사' 등의 단어가 포함된 경우 검색 성공률을 높이기 위해 핵심 단어 추출 시도 또는 원본 동시 활용
-                let searchName = corpName.replace(/주식회사|\(주\)|(주)/g, "").trim();
-                if (!searchName) searchName = corpName; // 전부 지워졌으면 원본 유지
+                // 검색어 정제: 띄어쓰기 제거 및 '주식회사', '(주)' 등 제거 후 핵심 키워드 추출
+                const cleanInputName = rawCorpName.replace(/주식회사|\(주\)|\(유\)|\(합\)|\s+/g, "");
 
-                let fscUrl = `https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpBsInfo_V2?serviceKey=${API_KEY}&numOfRows=20&pageNo=1&resultType=json`;
+                // 넉넉하게 데이터를 받아와서 클라이언트 측에서 유연하게 필터링
+                let fscUrl = `https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpBsInfo_V2?serviceKey=${API_KEY}&numOfRows=50&pageNo=1&resultType=json`;
                 
-                if (searchName) {
-                    fscUrl += `&corpNm=${encodeURIComponent(searchName)}`;
+                // API에는 핵심 키워드만 전달 (만약 입력값이 있다면)
+                if (cleanInputName) {
+                    fscUrl += `&corpNm=${encodeURIComponent(cleanInputName)}`;
                 }
 
                 const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fscUrl)}`;
-                
                 const response = await fetch(proxyUrl);
                 const rawText = await response.text();
                 
@@ -108,30 +107,46 @@
                     throw new Error("API 응답 파싱 실패");
                 }
 
-                const items = data?.response?.body?.items?.item;
-                if (!items || items.length === 0) {
-                    throw new Error("기업 정보를 찾을 수 없습니다.");
+                let items = data?.response?.body?.items?.item;
+                if (!items) {
+                    throw new Error("검색 결과가 없습니다.");
                 }
 
                 let companyList = Array.isArray(items) ? items : [items];
-                
-                // 주소 조건이 입력된 경우 필터링
-                if (addressQuery) {
-                    const filtered = companyList.filter(item => {
-                        const addr = item.enpRprFndnAddr || item.refineRoadnmAddr || "";
-                        return addr.includes(addressQuery);
+
+                // 스마트 유연 필터링 (띄어쓰기나 주식회사 유무와 상관없이 포함된 기업 찾기)
+                if (cleanInputName) {
+                    const smartFiltered = companyList.filter(item => {
+                        const dbCorpName = (item.corpNm || "").replace(/주식회사|\(주\)|\(유\)|\(합\)|\s+/g, "");
+                        return dbCorpName.includes(cleanInputName);
                     });
-                    if (filtered.length > 0) {
-                        companyList = filtered;
+                    if (smartFiltered.length > 0) {
+                        companyList = smartFiltered;
                     }
                 }
 
-                const company = companyList[0];
+                // 주소 조건이 있는 경우 추가 필터링
+                if (addressQuery) {
+                    const cleanAddrQuery = addressQuery.replace(/\s+/g, "");
+                    const addrFiltered = companyList.filter(item => {
+                        const addr = (item.enpRprFndnAddr || item.refineRoadnmAddr || "").replace(/\s+/g, "");
+                        return addr.includes(cleanAddrQuery);
+                    });
+                    if (addrFiltered.length > 0) {
+                        companyList = addrFiltered;
+                    }
+                }
+
+                if (companyList.length === 0) {
+                    throw new Error("조건에 맞는 기업이 없습니다.");
+                }
+
+                const company = companyList[0]; // 가장 정확도가 높은 첫 번째 결과
                 
                 const bizNo = company.bizno || "-";
                 const corpNo = company.crno || "-";
                 const address = company.enpRprFndnAddr || company.refineRoadnmAddr || "주소 정보 없음";
-                const name = company.corpNm || corpName;
+                const name = company.corpNm || rawCorpName;
                 const phone = company.enpTlno || company.telNo || "전화번호 미공개 (포털 검색 보완 필요)";
 
                 // 국세청 사업자 상태조회 API 연동
@@ -161,7 +176,7 @@
                     }
                 }
 
-                // 결과 화면에 반영
+                // 결과 화면 반영
                 document.getElementById('resCorpName').innerText = name;
                 document.getElementById('resBizNo').innerText = bizNo;
                 document.getElementById('resCorpNo').innerText = corpNo;
