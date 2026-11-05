@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>모바일 법인 통합 조회</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col justify-between">
+
+    <!-- 헤더 -->
+    <header class="bg-blue-600 text-white p-4 text-center shadow-md">
+        <h1 class="text-lg font-bold">🏢 모바일 법인 정보 조회</h1>
+        <p class="text-xs text-blue-100 mt-1">상호와 주소로 즉시 조회합니다</p>
+    </header>
+
+    <!-- 검색 입력 영역 -->
+    <main class="p-4 max-w-md mx-auto w-full flex-grow">
+        <div class="bg-white p-4 rounded-xl shadow-sm space-y-3">
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">법인상호 (필수)</label>
+                <input type="text" id="corpName" placeholder="예: (주)한국테크" class="w-full p-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">소재지 주소 (선택/시·구·동)</label>
+                <input type="text" id="corpAddress" placeholder="예: 대전광역시 서구 둔산로" class="w-full p-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button onclick="searchCorp()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-sm hover:bg-blue-700 transition">
+                조회하기
+            </button>
+        </div>
+
+        <!-- 로딩 바 -->
+        <div id="loading" class="hidden text-center py-6">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
+            <p class="text-xs text-slate-500 mt-2">공공데이터 및 기업 정보를 조회 중입니다...</p>
+        </div>
+
+        <!-- 결과 카드 영역 -->
+        <div id="resultCard" class="hidden mt-4 bg-white p-4 rounded-xl shadow-sm space-y-3 border-l-4 border-blue-600">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h2 id="resName" class="font-bold text-base text-slate-800">법인명</h2>
+                <span id="resStatus" class="px-2 py-0.5 text-xs rounded-full font-medium bg-emerald-100 text-emerald-700">계속사업자</span>
+            </div>
+            <div class="text-xs space-y-2 text-slate-600">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">사업자등록번호</span>
+                    <span id="resBizNo" class="font-mono font-medium text-slate-800">-</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">법인등록번호</span>
+                    <span id="resCorpNo" class="font-mono font-medium text-slate-800">-</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">대표전화번호</span>
+                    <span id="resPhone" class="font-mono font-medium text-blue-600">-</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block mb-0.5">현재 주소</span>
+                    <span id="resAddr" class="text-slate-800">-</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="text-center p-4 text-xs text-slate-400">
+        Mobile Corporate Search System
+    </footer>
+
+    <!-- 자바스크립트 로직 -->
+    <script>
+        function searchCorp() {
+            const name = document.getElementById('corpName').value.trim();
+            const addr = document.getElementById('corpAddress').value.trim();
+
+            if (!name) {
+                alert('법인상호를 입력해주세요.');
+                return;
+            }
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('resultCard').classList.add('hidden');
+
+            // 가상 API 조회 시뮬레이션 (추후 실제 공공 API 연동 가능)
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('resultCard').classList.remove('hidden');
+
+                // 테스트 데이터 바인딩
+                document.getElementById('resName').innerText = name;
+                document.getElementById('resBizNo').innerText = '123-81-*****';
+                document.getElementById('resCorpNo').innerText = '110111-*******';
+                document.getElementById('resPhone').innerText = '042-***-****';
+                document.getElementById('resAddr').innerText = addr ? addr + ' (조회 주소)' : '대전광역시 서구 둔산동';
+            }, 800);
+        }
+    </script>
+</body>
+</html>
