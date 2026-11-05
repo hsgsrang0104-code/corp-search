@@ -3,65 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>기업 정보 조회 시스템</title>
+    <title>국세청 사업자 상태 실시간 조회</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-4">
 
     <div class="w-full max-w-md bg-blue-600 text-white rounded-xl p-4 shadow-md text-center mb-6">
-        <h1 class="text-xl font-bold">🏢 스마트 기업 정보 조회</h1>
-        <p class="text-xs text-blue-100 mt-1">국세청 연동 실시간 상태 검증 시스템</p>
+        <h1 class="text-xl font-bold">🏢 국세청 사업자 실시간 조회</h1>
+        <p class="text-xs text-blue-100 mt-1">간결한 폐업 여부 및 상태 확인 시스템</p>
     </div>
 
     <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6 space-y-4">
         <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">법인상호 / 기업명</label>
-            <input type="text" id="corpNameInput" placeholder="예: 탑안전공사" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">사업자등록번호 (10자리)</label>
+            <input type="text" id="bizNoInput" placeholder="예: 1238164152 (하이픈 제외)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
         </div>
-        <button onclick="searchCompany()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow">
-            조회하기
+        <button onclick="searchStatus()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow">
+            실시간 조회하기
         </button>
     </div>
 
     <div id="loading" class="hidden text-center py-6">
         <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-        <p class="text-xs text-gray-500 mt-2">기업 정보를 조회하고 있습니다...</p>
+        <p class="text-xs text-gray-500 mt-2">국세청 망에서 실시간 조회 중...</p>
     </div>
 
     <div id="resultContainer" class="w-full max-w-md bg-white rounded-xl p-5 shadow-md hidden border-l-4 border-blue-600">
         <div class="flex justify-between items-center mb-3 border-b pb-2">
-            <h2 id="resCorpName" class="text-lg font-bold text-gray-800">정보 없음</h2>
-            <span id="resStatusBadge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700">상태확인중</span>
+            <h2 id="resBizNo" class="text-lg font-bold text-gray-800">000-00-00000</h2>
+            <span id="resStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-700">상태확인</span>
         </div>
         <div class="space-y-2.5 text-sm">
             <div class="flex justify-between">
-                <span class="text-gray-500">대표자명</span>
-                <span id="resCeo" class="font-medium text-gray-800">정보 없음</span>
+                <span class="text-gray-500">과세 유형</span>
+                <span id="resTaxType" class="font-medium text-gray-800">정보 없음</span>
             </div>
             <div class="flex justify-between">
-                <span class="text-gray-500">설립일</span>
-                <span id="resDate" class="font-medium text-gray-800">정보 없음</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">사업자등록번호</span>
-                <span id="resBizNo" class="font-medium text-gray-800">정보 없음</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-gray-500">대표전화번호</span>
-                <span id="resPhone" class="font-medium text-blue-600">정보 없음</span>
-            </div>
-            <div>
-                <span class="text-gray-500 block mb-1">사업장 주소</span>
-                <span id="resAddress" class="font-medium text-gray-800 text-xs bg-gray-50 p-2 rounded block leading-relaxed">정보 없음</span>
+                <span class="text-gray-500">폐업일자 (해당시)</span>
+                <span id="resEndDate" class="font-medium text-gray-800">-</span>
             </div>
         </div>
     </div>
 
     <script>
-        async function searchCompany() {
-            const rawCorpName = document.getElementById('corpNameInput').value.trim();
-            if (!rawCorpName) {
-                alert("기업명을 입력해 주세요.");
+        async function searchStatus() {
+            const rawBizNo = document.getElementById('bizNoInput').value.trim();
+            if (!rawBizNo) {
+                alert("사업자등록번호를 입력해 주세요.");
                 return;
             }
 
@@ -69,23 +57,34 @@
             document.getElementById('resultContainer').classList.add('hidden');
 
             try {
-                const response = await fetch(`/api/search?corpName=${encodeURIComponent(rawCorpName)}`);
+                const response = await fetch(`/api/search?bizNo=${encodeURIComponent(rawBizNo)}`);
                 const data = await response.json();
 
-                document.getElementById('resCorpName').innerText = data.corpNm || rawCorpName;
-                document.getElementById('resCeo').innerText = data.ceoNm || "정보 없음";
-                document.getElementById('resDate').innerText = data.foundDate || "정보 없음";
-                document.getElementById('resBizNo').innerText = data.bizno || "정보 없음";
-                document.getElementById('resPhone').innerText = data.phone || "정보 없음";
-                document.getElementById('resAddress').innerText = data.address || "정보 없음";
+                if (!response.ok) {
+                    alert(data.error || "조회 중 오류가 발생했습니다.");
+                    return;
+                }
+
+                document.getElementById('resBizNo').innerText = data.bizno;
+                document.getElementById('resTaxType').innerText = data.taxType;
+                document.getElementById('resEndDate').innerText = data.endStateDate || "-";
 
                 const badge = document.getElementById('resStatusBadge');
-                badge.innerText = data.bizStatus || "조회 완료";
-                badge.className = `px-2.5 py-1 text-xs font-semibold rounded-full ${data.bizStatus?.includes('폐업') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+                const status = data.bizStatus; // 예: "계속사업자", "폐업자" 등
+                badge.innerText = status;
+                
+                // 상태에 따른 배지 컬러 분기
+                if (status.includes('폐업')) {
+                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-red-100 text-red-700';
+                } else if (status.includes('휴업')) {
+                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-yellow-100 text-yellow-700';
+                } else {
+                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700';
+                }
 
                 document.getElementById('resultContainer').classList.remove('hidden');
             } catch (e) {
-                alert("조회 실패: 서버 연결을 확인해 주세요.");
+                alert("서버 통신 오류가 발생했습니다.");
             } finally {
                 document.getElementById('loading').classList.add('hidden');
             }
