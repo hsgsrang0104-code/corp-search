@@ -3,53 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>국세청 사업자 상태 실시간 조회</title>
+    <title>기업 정보 & 국세청 상태 통합 조회</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-4">
 
     <div class="w-full max-w-md bg-blue-600 text-white rounded-xl p-4 shadow-md text-center mb-6">
-        <h1 class="text-xl font-bold">🏢 국세청 사업자 실시간 조회</h1>
-        <p class="text-xs text-blue-100 mt-1">간결한 폐업 여부 및 상태 확인 시스템</p>
+        <h1 class="text-xl font-bold">🏢 기업 정보 & 폐업 여부 조회</h1>
+        <p class="text-xs text-blue-100 mt-1">AI 검색 결과 최우선 + 국세청 실시간 대사</p>
     </div>
 
     <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6 space-y-4">
         <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">사업자등록번호 (10자리)</label>
-            <input type="text" id="bizNoInput" placeholder="예: 1238164152 (하이픈 제외)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">상호명 <span class="text-red-500">*필수</span></label>
+            <input type="text" id="corpNameInput" placeholder="예: (주)탑안전공사" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
         </div>
-        <button onclick="searchStatus()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow">
-            실시간 조회하기
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">소재지 / 주소 <span class="text-gray-400 text-xs">(선택)</span></label>
+            <input type="text" id="addressInput" placeholder="예: 대전 서구" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+        </div>
+        <button onclick="searchCompany()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow">
+            기업 및 상태 조회하기
         </button>
     </div>
 
     <div id="loading" class="hidden text-center py-6">
         <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-        <p class="text-xs text-gray-500 mt-2">국세청 망에서 실시간 조회 중...</p>
+        <p class="text-xs text-gray-500 mt-2">AI 탐색 및 국세청 데이터 조회 중...</p>
     </div>
 
-    <div id="resultContainer" class="w-full max-w-md bg-white rounded-xl p-5 shadow-md hidden border-l-4 border-blue-600">
-        <div class="flex justify-between items-center mb-3 border-b pb-2">
-            <h2 id="resBizNo" class="text-lg font-bold text-gray-800">000-00-00000</h2>
+    <div id="resultContainer" class="w-full max-w-md bg-white rounded-xl p-5 shadow-md hidden border-l-4 border-blue-600 space-y-4">
+        <div class="flex justify-between items-center border-b pb-3">
+            <div>
+                <h2 id="resCorpName" class="text-lg font-bold text-gray-800">기업명</h2>
+                <p id="resAddress" class="text-xs text-gray-500 mt-0.5">주소 정보</p>
+            </div>
             <span id="resStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-700">상태확인</span>
         </div>
-        <div class="space-y-2.5 text-sm">
+
+        <!-- AI 검색 결과 영역 -->
+        <div class="bg-gray-50 p-3 rounded-lg space-y-2 text-sm">
+            <div class="text-xs font-semibold text-blue-600 mb-1">🔍 AI 탐색 정보 (최우선)</div>
             <div class="flex justify-between">
-                <span class="text-gray-500">과세 유형</span>
-                <span id="resTaxType" class="font-medium text-gray-800">정보 없음</span>
+                <span class="text-gray-500">대표자</span>
+                <span id="resCeo" class="font-medium text-gray-800">-</span>
             </div>
             <div class="flex justify-between">
-                <span class="text-gray-500">폐업일자 (해당시)</span>
+                <span class="text-gray-500">사업자번호</span>
+                <span id="resBizNo" class="font-medium text-gray-800">-</span>
+            </div>
+        </div>
+
+        <!-- 국세청 상태 대사 영역 -->
+        <div class="space-y-2 text-sm border-t pt-3">
+            <div class="text-xs font-semibold text-green-600 mb-1">🏛️ 국세청 공공데이터 실시간 대사</div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">사업자 상태</span>
+                <span id="resStatusText" class="font-bold text-gray-800">미확인</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">과세 유형</span>
+                <span id="resTaxType" class="font-medium text-gray-800">-</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">폐업일자</span>
                 <span id="resEndDate" class="font-medium text-gray-800">-</span>
             </div>
         </div>
     </div>
 
     <script>
-        async function searchStatus() {
-            const rawBizNo = document.getElementById('bizNoInput').value.trim();
-            if (!rawBizNo) {
-                alert("사업자등록번호를 입력해 주세요.");
+        async function searchCompany() {
+            const corpName = document.getElementById('corpNameInput').value.trim();
+            const address = document.getElementById('addressInput').value.trim();
+
+            if (!corpName) {
+                alert("상호명을 입력해 주세요.");
                 return;
             }
 
@@ -57,7 +86,7 @@
             document.getElementById('resultContainer').classList.add('hidden');
 
             try {
-                const response = await fetch(`/api/search?bizNo=${encodeURIComponent(rawBizNo)}`);
+                const response = await fetch(`/api/search?corpName=${encodeURIComponent(corpName)}&address=${encodeURIComponent(address)}`);
                 const data = await response.json();
 
                 if (!response.ok) {
@@ -65,21 +94,27 @@
                     return;
                 }
 
+                document.getElementById('resCorpName').innerText = data.corpName;
+                document.getElementById('resAddress').innerText = data.address;
+                document.getElementById('resCeo').innerText = data.ceoNm;
                 document.getElementById('resBizNo').innerText = data.bizno;
+
+                document.getElementById('resStatusText').innerText = data.bizStatus;
                 document.getElementById('resTaxType').innerText = data.taxType;
-                document.getElementById('resEndDate').innerText = data.endStateDate || "-";
+                document.getElementById('resEndDate').innerText = data.endDate;
 
                 const badge = document.getElementById('resStatusBadge');
-                const status = data.bizStatus; // 예: "계속사업자", "폐업자" 등
+                const status = data.bizStatus;
                 badge.innerText = status;
                 
-                // 상태에 따른 배지 컬러 분기
                 if (status.includes('폐업')) {
                     badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-red-100 text-red-700';
                 } else if (status.includes('휴업')) {
                     badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-yellow-100 text-yellow-700';
-                } else {
+                } else if (status.includes('계속')) {
                     badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700';
+                } else {
+                    badge.className = 'px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-700';
                 }
 
                 document.getElementById('resultContainer').classList.remove('hidden');
