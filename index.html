@@ -3,106 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>모바일 법인 통합 조회</title>
+    <title>모바일 법인 정보 조회</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-100 min-h-screen flex flex-col justify-between">
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-4">
 
-    <!-- 헤더 -->
-    <header class="bg-blue-600 text-white p-4 text-center shadow-md">
-        <h1 class="text-lg font-bold">🏢 모바일 법인 정보 조회</h1>
-        <p class="text-xs text-blue-100 mt-1">상호와 주소로 즉시 조회합니다</p>
-    </header>
+    <!-- 상단 타이틀 영역 -->
+    <div class="w-full max-w-md bg-blue-600 text-white rounded-xl p-4 shadow-md text-center mb-6">
+        <h1 class="text-xl font-bold">🏢 모바일 법인 정보 조회</h1>
+        <p class="text-xs text-blue-100 mt-1">공공데이터 실시간 연동 서비스</p>
+    </div>
 
-    <!-- 검색 입력 영역 -->
-    <main class="p-4 max-w-md mx-auto w-full flex-grow">
-        <div class="bg-white p-4 rounded-xl shadow-sm space-y-3">
+    <!-- 검색 입력 폼 -->
+    <div class="w-full max-w-md bg-white rounded-xl p-5 shadow-md mb-6">
+        <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">법인상호 (필수)</label>
+            <input type="text" id="corpNameInput" placeholder="예: 투어라운지" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+        </div>
+        <button onclick="searchCompany()" id="searchBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow">
+            조회하기
+        </button>
+    </div>
+
+    <!-- 로딩 상태 표시 -->
+    <div id="loading" class="hidden text-center py-6">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+        <p class="text-xs text-gray-500 mt-2">공공데이터 서버에서 정보를 조회하고 있습니다...</p>
+    </div>
+
+    <!-- 결과 출력 영역 -->
+    <div id="resultContainer" class="w-full max-w-md bg-white rounded-xl p-5 shadow-md hidden border-l-4 border-blue-600">
+        <div class="flex justify-between items-center mb-3 border-b pb-2">
+            <h2 id="resCorpName" class="text-lg font-bold text-gray-800">상호명</h2>
+            <span id="resStatusBadge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">상태확인중</span>
+        </div>
+        <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+                <span class="text-gray-500">사업자등록번호</span>
+                <span id="resBizNo" class="font-medium text-gray-800">-</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">법인등록번호</span>
+                <span id="resCorpNo" class="font-medium text-gray-800">-</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">대표전화번호</span>
+                <span id="resPhone" class="font-medium text-blue-600">-</span>
+            </div>
             <div>
-                <label class="block text-xs font-semibold text-slate-600 mb-1">법인상호 (필수)</label>
-                <input type="text" id="corpName" placeholder="예: (주)한국테크" class="w-full p-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-slate-600 mb-1">소재지 주소 (선택/시·구·동)</label>
-                <input type="text" id="corpAddress" placeholder="예: 대전광역시 서구 둔산로" class="w-full p-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <button onclick="searchCorp()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-sm hover:bg-blue-700 transition">
-                조회하기
-            </button>
-        </div>
-
-        <!-- 로딩 바 -->
-        <div id="loading" class="hidden text-center py-6">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
-            <p class="text-xs text-slate-500 mt-2">공공데이터 및 기업 정보를 조회 중입니다...</p>
-        </div>
-
-        <!-- 결과 카드 영역 -->
-        <div id="resultCard" class="hidden mt-4 bg-white p-4 rounded-xl shadow-sm space-y-3 border-l-4 border-blue-600">
-            <div class="flex justify-between items-center border-b pb-2">
-                <h2 id="resName" class="font-bold text-base text-slate-800">법인명</h2>
-                <!-- 상태 배지 (계속사업자 / 폐업 등 동적 표시) -->
-                <span id="resStatus" class="px-2 py-0.5 text-xs rounded-full font-medium bg-emerald-100 text-emerald-700">계속사업자</span>
-            </div>
-            <div class="text-xs space-y-2 text-slate-600">
-                <div class="flex justify-between">
-                    <span class="text-slate-400">사업자등록번호</span>
-                    <span id="resBizNo" class="font-mono font-medium text-slate-800">-</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-400">법인등록번호</span>
-                    <span id="resCorpNo" class="font-mono font-medium text-slate-800">-</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-400">대표전화번호</span>
-                    <span id="resPhone" class="font-mono font-medium text-blue-600">-</span>
-                </div>
-                <div>
-                    <span class="text-slate-400 block mb-0.5">현재 주소</span>
-                    <span id="resAddr" class="text-slate-800">-</span>
-                </div>
+                <span class="text-gray-500 block mb-1">현재 주소</span>
+                <span id="resAddress" class="font-medium text-gray-800 text-xs bg-gray-50 p-2 rounded block leading-relaxed">-</span>
             </div>
         </div>
-    </main>
+    </div>
 
-    <!-- 푸터 -->
-    <footer class="text-center p-4 text-xs text-slate-400">
-        Mobile Corporate Search System
-    </footer>
+    <!-- 에러/안내 메시지 영역 -->
+    <div id="errorContainer" class="w-full max-w-md bg-red-50 text-red-700 p-4 rounded-xl shadow-md hidden text-sm text-center">
+        조회된 결과가 없거나 공공데이터 연동 중 오류가 발생했습니다. 정확한 상호명을 입력해 주세요.
+    </div>
 
-    <!-- 자바스크립트 로직 -->
     <script>
-        function searchCorp() {
-            const name = document.getElementById('corpName').value.trim();
-            const addr = document.getElementById('corpAddress').value.trim();
+        const API_KEY = "dbc8f97a8eb1093b6b8ec7a0c664e3d01f2a3a33720f2d373a7bf91314fb15";
 
-            if (!name) {
-                alert('법인상호를 입력해주세요.');
+        async function searchCompany() {
+            const corpName = document.getElementById('corpNameInput').value.trim();
+            if (!corpName) {
+                alert("조회할 법인상호를 입력해주세요.");
                 return;
             }
 
+            // UI 초기화
             document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('resultCard').classList.add('hidden');
+            document.getElementById('resultContainer').classList.add('hidden');
+            document.getElementById('errorContainer').classList.add('hidden');
+            document.getElementById('searchBtn').disabled = true;
 
-            // 가상 API 조회 시뮬레이션 (상세 번호 및 전체 주소 반영)
-            setTimeout(() => {
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('resultCard').classList.remove('hidden');
-
-                // 마스킹 없는 전체 정보 바인딩
-                document.getElementById('resName').innerText = name;
-                document.getElementById('resBizNo').innerText = '314-81-58291';
-                document.getElementById('resCorpNo').innerText = '160111-0048291';
-                document.getElementById('resPhone').innerText = '042-471-8920';
+            try {
+                // 1. 금융위원회 기업기본정보 API 호출 (법인명 검색)
+                // 브라우저 CORS 우회를 위해 프록시 서버 경유 또는 표준 엔드포인트 호출
+                const fscUrl = `https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpBsInfo_V2?serviceKey=${API_KEY}&numOfRows=1&pageNo=1&resultType=json&corpNm=${encodeURIComponent(corpName)}`;
                 
-                // 주소가 입력된 경우 상세 주소까지 전체 표출, 미입력시 기본 풀 주소 표출
-                const fullAddress = addr ? addr + ' 123번길 45, 타임빌딩 3층 301호' : '대전광역시 서구 둔산로 100, 대영빌딩 22층 2202호 (둔산동)';
-                document.getElementById('resAddr').innerText = fullAddress;
+                // CORS 프록시 활용 (정적 웹 호스팅 환경 대응)
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fscUrl)}`;
+                
+                const response = await fetch(proxyUrl);
+                const data = await response.json();
 
-                // 폐업여부 상태 (예시: 정상 기업은 '계속사업자', 필요시 변경 가능)
-                const statusEl = document.getElementById('resStatus');
-                statusEl.innerText = '계속사업자';
-                statusEl.className = 'px-2 py-0.5 text-xs rounded-full font-medium bg-emerald-100 text-emerald-700';
-            }, 800);
+                const items = data?.response?.body?.items?.item;
+                if (!items || items.length === 0) {
+                    throw new Error("기업 정보를 찾을 수 없습니다.");
+                }
+
+                const company = Array.isArray(items) ? items[0] : items;
+                
+                const bizNo = company.bizno || "-";
+                const corpNo = company.crno || "-";
+                const address = company.enpRprFndnAddr || company.refineRoadnmAddr || "주소 정보 없음";
+                const name = company.corpNm || corpName;
+                
+                // 전화번호가 없는 경우 보조 검색 결과 안내 (블로그/포털 검색 연동 영역)
+                let phone = company.enpTlno || company.telNo || "전화번호 미공개 (포털 검색 보완 필요)";
+
+                // 2. 국세청 사업자 상태조회 API 연동 (사업자번호가 있는 경우)
+                let bizStatus = "계속사업자";
+                let badgeClass = "bg-green-100 text-green-700";
+
+                if (bizNo && bizNo !== "-") {
+                    try {
+                        const ntsUrl = `https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=${API_KEY}`;
+                        const ntsBody = { b_no: [bizNo.replace(/-/g, "")] };
+                        
+                        const ntsResponse = await fetch(ntsUrl, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                            body: JSON.stringify(ntsBody)
+                        });
+                        const ntsData = await ntsResponse.json();
+                        if (ntsData && ntsData.data && ntsData.data.length > 0) {
+                            const statusObj = ntsData.data[0];
+                            bizStatus = statusObj.b_stt || "계속사업자";
+                            if (bizStatus.includes("폐업")) {
+                                badgeClass = "bg-red-100 text-red-700";
+                            }
+                        }
+                    } catch (e) {
+                        console.log("국세청 상태조회 스킵 또는 예외 발생", e);
+                    }
+                }
+
+                // 결과 화면에 반영
+                document.getElementById('resCorpName').innerText = name;
+                document.getElementById('resBizNo').innerText = bizNo;
+                document.getElementById('resCorpNo').innerText = corpNo;
+                document.getElementById('resPhone').innerText = phone;
+                document.getElementById('resAddress').innerText = address;
+
+                const badge = document.getElementById('resStatusBadge');
+                badge.innerText = bizStatus;
+                badge.className = `px-2.5 py-1 text-xs font-semibold rounded-full ${badgeClass}`;
+
+                document.getElementById('resultContainer').classList.remove('hidden');
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('errorContainer').classList.remove('hidden');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('searchBtn').disabled = false;
+            }
         }
     </script>
 </body>
