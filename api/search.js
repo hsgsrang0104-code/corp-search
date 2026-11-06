@@ -10,90 +10,73 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: "서버 API 키가 설정되지 않았습니다." });
     }
 
-    // (주), 주식회사 및 특수문자/공백 제거 함수
-    function cleanCorpName(name) {
-        if (!name) return "";
-        return name
-            .replace(/\(주\)/g, "")
-            .replace(/주식회사/g, "")
-            .replace(/\(유\)/g, "")
-            .replace(/유한회사/g, "")
-            .replace(/[^a-zA-Z0-9가-힣]/g, "")
-            .trim();
-    }
-
-    async function fetchCorpData(nameToSearch) {
-        const baseUrl = "https://apis.data.go.kr/1160100/service/GetCorpOutlineInfoService_v2/getCorpOutline_V2";
-        const params = new URLSearchParams({
-            serviceKey: apiKey,
-            resultType: "json",
-            pageNo: "1",
-            numOfRows: "10",
-            corpNm: nameToSearch
-        });
-
-        const response = await fetch(`${baseUrl}?${params.toString()}`, { method: "GET" });
-        const text = await response.text();
-        const data = JSON.parse(text);
-
-        const body = data?.response?.body || {};
-        const items = body?.items?.item || [];
-        const itemList = Array.isArray(items) ? items : (items ? [items] : []);
-
-        return {
-            totalCount: body.totalCount || 0,
-            items: itemList
-        };
-    }
-
     try {
-        let searchName = corpName;
-        let result = await fetchCorpData(searchName);
+        // 한글 상호명 인코딩 및 URL 생성 (디코딩된 API 키를 직접 붙이는 방식)
+        const encodedCorpNm = encodeURIComponent(corpName.trim());
+        const url = `https://apis.data.go.kr/1160100/service/GetCorpOutlineInfoService_v2/getCorpOutline_V2?serviceKey=${apiKey}&resultType=json&pageNo=1&numOfRows=10&corpNm=${encodedCorpNm}`;
 
-        // 1차 검색 결과가 없으면 정제된 이름으로 재검색
-        if (result.totalCount === 0) {
-            const cleaned = cleanCorpName(corpName);
-            if (cleaned && cleaned !== searchName) {
-                result = await fetchCorpData(cleaned);
-            }
-        }
+        const response = await fetch(url, {
+            headers: { 'Accept': 'application/json' }
+        });
+        
+        const text = await response.text();
+        console.log("=== API 원본 응답 ===", text); // Vercel 로그에서 확인용
 
-        // 결과가 없는 경우 모두 "정보없음" 처리
-        if (result.totalCount === 0 || result.items.length === 0) {
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            // API에서 XML이나 에러 메시지가 전달된 경우
             return res.status(200).json({
                 success: false,
-                corpName: "정보없음",
+                corpName: "API 응답 형식이 다릅니다 (인증/권한 확인)",
+                ceoNm: text.substring(0, 50),
+                bizno: "정보없음",
+                crno: "정보없음",
+                phone: "정보없음",
+                address: "정보없음",
+                status: "오류"
+            });
+        }
+
+        const items = data?.response?.body?.items?.item;
+        let itemList = [];
+        
+        if (Array.isArray(items)) {
+            itemList = items;
+        } else if (items) {
+            itemList = [items];
+        }
+
+        if (itemList.length === 0) {
+            return res.status(200).json({
+                success: false,
+                corpName: `${corpName} (조회된 결과 없음)`,
                 ceoNm: "정보없음",
                 bizno: "정보없음",
                 crno: "정보없음",
                 phone: "정보없음",
                 address: address || "정보없음",
-                status: "정보없음"
+                status: "결과없음"
             });
         }
 
-        // 주소가 입력된 경우 일치하는 항목 우선 선택, 없기면 1순위 항목 선택
-        let selectedItem = result.items[0];
-        if (address) {
-            const matched = result.items.find(item => item.enpBsadr && item.enpBsadr.includes(address));
-            if (matched) {
-                selectedItem = matched;
-            }
-        }
+        // 가장 잘 일치하는 첫 번째 결과 추출
+        const target = itemList[0];
 
         return res.status(200).json({
             success: true,
-            corpName: selectedItem.corpNm || "정보없음",
-            ceoNm: selectedItem.ceoNm || "정보없음",
-            bizno: selectedItem.bizNo || "정보없음",
-            crno: selectedItem.crno || "정보없음",
-            phone: selectedItem.enpTlno || "정보없음",
-            address: selectedItem.enpBsadr || "정보없음",
-            status: "계속사업자" // 기본 유효 법인 기준 (추후 국세청 API 상태 연동 확장 가능)
+            corpName: target.corpNm || corpName,
+            ceoNm: target.ceoNm || "정보없음",
+            bizno: target.bizNo || "정보없음",
+            crno: target.crno || "정보없음",
+            phone: target.enpTlno || "정보없음",
+            address: target.enpBsadr || "정보없음",
+            status: "계속사업자"
         });
 
-    } catch (e) {
-        console.error("API Error:", e);
-        return res.status(500).json({ error: "데이터 조회 중 오류가 발생했습니다." });
+    } catch (error) {
+        console.error("서버 내부 에러:", error);
+        return res.status(500).json({ error: "서버 통신 실패: " + error.message });
     }
 }
