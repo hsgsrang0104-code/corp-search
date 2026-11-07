@@ -1,107 +1,146 @@
-<script>
-async function searchCorp() {
-    const corpName = document.getElementById('corpName').value.trim();
-    const address = document.getElementById('address').value.trim();
-    const loading = document.getElementById('loading');
-    const resultBox = document.getElementById('resultBox');
-    const errorMessage = document.getElementById('errorMessage');
-    const searchButton = document.getElementById('searchButton');
+export default async function handler(req, res) {
+    if (req.method !== "GET") {
+        return res.status(405).json({
+            success: false,
+            error: "GET 요청만 허용됩니다."
+        });
+    }
+
+    const corpName = String(req.query.corpName || "").trim();
+    const address = String(req.query.address || "").trim();
+    const queryBizno = String(req.query.bizno || "").trim();
 
     if (!corpName) {
-        alert("상호명을 입력해 주세요.");
-        document.getElementById('corpName').focus();
-        return;
+        return res.status(400).json({
+            success: false,
+            error: "상호명이 전달되지 않았습니다."
+        });
     }
 
-    resultBox.style.display = 'none';
-    errorMessage.style.display = 'none';
-    errorMessage.innerText = '';
+    const ntsApiKey = process.env.NTS_API_KEY;
+    const financeApiKey = process.env.DATA_GO_KR_API_KEY;
 
-    loading.style.display = 'block';
-    searchButton.disabled = true;
-    searchButton.innerText = '조회 중...';
+    function formatBizNo(value) {
+        const number = String(value || "").replace(/\D/g, "");
+        if (number.length !== 10) return value || "정보없음";
+        return number.replace(/^(\d{3})(\d{2})(\d{5})$/, "$1-$2-$3");
+    }
+
+    function formatCorpNo(value) {
+        const number = String(value || "").replace(/\D/g, "");
+        if (number.length !== 13) return value || "정보없음";
+        return number.replace(/^(\d{6})(\d{7})$/, "$1-$2");
+    }
+
+    function normalize(value) {
+        return String(value || "")
+            .replace(/주식회사|㈜|\(주\)|주\)/g, "")
+            .replace(/\s/g, "")
+            .replace(/[()（）]/g, "")
+            .toLowerCase();
+    }
 
     try {
-        // [1단계] 브라우저(클라이언트)에서 직접 비즈노 API 호출 (국내 IP 활용)
-        // ※ 본인의 비즈노 API Key를 여기에 입력하거나 설정에서 불러오도록 합니다.
-        const biznoApiKey = "HhBUJ3jOITJpAxdtEcKm20SZlTBoIwdN"; // 본인 키 입력
-        const biznoUrl = `https://bizno.net/api/fapi?key=${encodeURIComponent(biznoApiKey)}&gb=3&q=${encodeURIComponent(corpName)}&type=json`;
+        let businessNumber = queryBizno.replace(/\D/g, "");
+        let initialCompanyName = corpName;
+        let initialCrno = "";
+        let initialAddress = address || "정보없음";
+        let ceoName = "정보없음";
+        let phoneNum = "정보없음";
+        let ntsStatus = "국세청 조회 필요";
 
-        const biznoResponse = await fetch(biznoUrl);
-        if (!biznoResponse.ok) {
-            throw new Error(`비즈노 API 통신 실패 (HTTP 상태: ${biznoResponse.status})`);
+        // 1. 국세청 API 검증 (독립 블록)
+        if (ntsApiKey && /^\d{10}$/.test(businessNumber)) {
+            try {
+                const ntsUrl = "https://api.odcloud.kr/api/nts-businessman/v1/status";
+                const ntsResponse = await fetch(`${ntsUrl}?serviceKey=${encodeURIComponent(ntsApiKey)}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify({ b_no: [businessNumber] })
+                });
+
+                if (ntsResponse.ok) {
+                    const ntsData = await ntsResponse.json();
+                    const resultList = ntsData?.data || [];
+                    const ntsResult = resultList.find(item =>
+                        String(item.b_no || "").replace(/\D/g, "") === businessNumber
+                    );
+
+                    if (ntsResult) {
+                        if (ntsResult.b_stt_cd === "01") ntsStatus = "계속사업자";
+                        else if (ntsResult.b_stt_cd === "02") ntsStatus = "휴업자";
+                        else if (ntsResult.b_stt_cd === "03") ntsStatus = "폐업자";
+                        else ntsStatus = ntsResult.b_stt || "정보 확인 필요";
+                    } else {
+                        ntsStatus = "국세청 등록정보 없음";
+                    }
+                } else {
+                    ntsStatus = "국세청 응답 오류";
+                }
+            } catch (ntsErr) {
+                console.warn("국세청 API 예외:", ntsErr.message);
+                ntsStatus = "국세청 조회 실패";
+            }
+        } else {
+            ntsStatus = ntsApiKey ? "사업자번호 형식 오류" : "국세청 인증키 미설정";
         }
 
-        const biznoData = await biznoResponse.json();
-        if (biznoData.resultCode !== 0 && biznoData.resultCode !== "0") {
-            throw new Error(`비즈노 검색 결과 없음: ${biznoData.resultMsg || '결과 없음'}`);
+        // 2. 금융위원회 API 보완 (독립 블록)
+        if (financeApiKey) {
+            try {
+                const financeUrl = "https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpOutline_V2";
+                const params = new URLSearchParams({
+                    serviceKey: financeApiKey,
+                    resultType: "json",
+                    pageNo: "1",
+                    numOfRows: "5",
+                    corpNm: corpName
+                });
+
+                const finResponse = await fetch(`${financeUrl}?${params.toString()}`);
+                if (finResponse.ok) {
+                    const finText = await finResponse.text();
+                    const finData = JSON.parse(finText);
+                    const finItems = finData?.response?.body?.items?.item;
+                    let finList = Array.isArray(finItems) ? finItems : (finItems ? [finItems] : []);
+
+                    const matchedFin = finList.find(f => {
+                        const fBiz = String(f.bzno || "").replace(/\D/g, "");
+                        return fBiz === businessNumber || normalize(f.corpNm) === normalize(initialCompanyName);
+                    }) || finList[0];
+
+                    if (matchedFin) {
+                        if (matchedFin.enpRprFnm) ceoName = matchedFin.enpRprFnm;
+                        if (matchedFin.enpTlno) phoneNum = matchedFin.enpTlno;
+                        if (matchedFin.enpBsadr) initialAddress = matchedFin.enpBsadr;
+                        if (matchedFin.crno) initialCrno = matchedFin.crno;
+                    }
+                }
+            } catch (finErr) {
+                console.warn("금융위원회 API 예외 (무시됨):", finErr.message);
+            }
         }
 
-        const rawItems = biznoData.items;
-        let itemList = Array.isArray(rawItems) ? rawItems : (rawItems ? [rawItems] : []);
-
-        if (itemList.length === 0) {
-            throw new Error("해당 상호명으로 등록된 기업정보가 비즈노에 없습니다.");
-        }
-
-        // 주소 매칭 함수
-        function normalize(val) {
-            return String(val || "").replace(/주식회사|㈜|\(주\)|주\)/g, "").replace(/\s/g, "").replace(/[()（）]/g, "").toLowerCase();
-        }
-
-        const searchName = normalize(corpName);
-        const rankedItems = itemList.map(item => {
-            const companyName = normalize(item.company);
-            const companyAddress = item.address || item.addr || "";
-            let score = 0;
-            if (companyName === searchName) score += 100;
-            else if (companyName.includes(searchName) || searchName.includes(companyName)) score += 50;
-            if (address && companyAddress.includes(address)) score += 100;
-            return { item, score };
+        return res.status(200).json({
+            success: true,
+            corpName: initialCompanyName,
+            ceoNm: ceoName,
+            bizno: formatBizNo(businessNumber),
+            crno: formatCorpNo(initialCrno),
+            phone: phoneNum,
+            address: initialAddress,
+            status: ntsStatus,
+            source: "비즈노(브라우저) + 국세청 + 금융위원회"
         });
-
-        rankedItems.sort((a, b) => b.score - a.score);
-        const target = rankedItems[0].item;
-
-        // [2단계 & 3단계] 확보한 사업자번호로 국세청 및 금융위 검증을 위해 백엔드 호출
-        const params = new URLSearchParams({
-            corpName: target.company || corpName,
-            bizno: target.bno || "",
-            address: target.address || target.addr || address
-        });
-
-        const verifyResponse = await fetch(`/api/verify?${params.toString()}`);
-        const verifyData = await verifyResponse.json();
-
-        if (!verifyResponse.ok || verifyData.success === false) {
-            throw new Error(verifyData.error || "추가 검증 중 오류가 발생했습니다.");
-        }
-
-        // 화면에 결과 출력
-        document.getElementById('res-corpName').innerText = verifyData.corpName || '정보없음';
-        document.getElementById('res-ceoNm').innerText = verifyData.ceoNm || '정보없음';
-        document.getElementById('res-bizno').innerText = verifyData.bizno || '정보없음';
-        document.getElementById('res-crno').innerText = verifyData.crno || '정보없음';
-        document.getElementById('res-phone').innerText = verifyData.phone || '정보없음';
-        document.getElementById('res-address').innerText = verifyData.address || '정보없음';
-        document.getElementById('res-status').innerText = verifyData.status || '조회 결과 없음';
-
-        document.getElementById('resultCount').innerText =
-            `전체 검색 결과 ${biznoData.totalCount ?? itemList.length}건 / 반환 결과 ${itemList.length}건`;
-
-        resultBox.style.display = 'block';
 
     } catch (error) {
-        console.error("조회 오류:", error);
-        errorMessage.innerText = "조회 중 오류가 발생했습니다.\n\n" + error.message;
-        errorMessage.style.display = 'block';
-    } finally {
-        loading.style.display = 'none';
-        searchButton.disabled = false;
-        searchButton.innerText = '조회하기';
+        console.error("서버 내부 치명적 오류:", error);
+        return res.status(500).json({
+            success: false,
+            error: "서버 처리 중 오류가 발생했습니다: " + error.message
+        });
     }
 }
-
-document.getElementById('corpName').addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
-document.getElementById('address').addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
-</script>
