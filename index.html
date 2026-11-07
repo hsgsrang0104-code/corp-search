@@ -203,7 +203,7 @@ async function searchCorp() {
     }
 
     try {
-        // [1단계] 브라우저에서 직접 비즈노 API 호출
+        // [1단계] 브라우저에서 직접 비즈노 무료 API 호출 (국내 IP 활용 및 해외 IP 차단 우회)
         const biznoApiKey = "HhBUJ3jOITJpAxdtEcKm20SZlTBoIwdN";
         const biznoUrl = `https://bizno.net/api/fapi?key=${encodeURIComponent(biznoApiKey)}&gb=3&q=${encodeURIComponent(corpName)}&type=json`;
 
@@ -226,7 +226,7 @@ async function searchCorp() {
         }
 
         if (itemList.length === 0) {
-            throw new Error("해당 상호명으로 등록된 유효한 기업정보가 비즈노에 없습니다.");
+            throw new Error("해당 상호명으로 등록된 기업정보가 비즈노에 없습니다.");
         }
 
         function normalize(val) {
@@ -247,41 +247,41 @@ async function searchCorp() {
         rankedItems.sort((a, b) => b.score - a.score);
 
         if (!rankedItems[0] || !rankedItems[0].item) {
-            throw new Error("검색된 기업의 상세 정보를 불러올 수 없습니다.");
+            throw new Error("검색된 기업 정보를 처리할 수 없습니다.");
         }
 
         const target = rankedItems[0].item;
-
-        // 비즈노가 보유한 정보 우선 추출
-        const biznoCeo = target.ceo || "정보없음";
-        const biznoAddress = target.address || target.addr || address || "정보없음";
         const biznoBizno = target.bno || "";
         const biznoCorpName = target.company || corpName;
 
-        // [2 & 3단계] 백엔드 검증 호출 (국세청 상태 및 금융위 보완)
+        // [2 & 3단계] 확보한 사업자번호와 상호명을 백엔드로 전달하여 공공데이터(대표자, 주소, 전화번호 등) 조회
         const params = new URLSearchParams({
             corpName: biznoCorpName,
             bizno: biznoBizno,
-            address: biznoAddress
+            address: address
         });
 
         const verifyResponse = await fetch(`/api/search?${params.toString()}`);
         const responseText = await verifyResponse.text();
 
-        let verifyData = {};
+        let verifyData;
         try {
             verifyData = JSON.parse(responseText);
         } catch (e) {
-            console.warn("백엔드 JSON 파싱 실패, 비즈노 데이터로 대체합니다.");
+            throw new Error("서버 응답 오류:\n" + responseText.substring(0, 300));
         }
 
-        // 결과 화면 반영 (비즈노 데이터 우선 + 백엔드 검증 결과 조합)
-        document.getElementById('res-corpName').innerText = biznoCorpName;
-        document.getElementById('res-ceoNm').innerText = (verifyData.ceoNm && verifyData.ceoNm !== "정보없음") ? verifyData.ceoNm : biznoCeo;
+        if (!verifyResponse.ok || verifyData.success === false) {
+            throw new Error(verifyData.error || "상세 정보 조회 중 오류가 발생했습니다.");
+        }
+
+        // 결과 화면 반영
+        document.getElementById('res-corpName').innerText = verifyData.corpName || biznoCorpName;
+        document.getElementById('res-ceoNm').innerText = verifyData.ceoNm || '정보없음';
         document.getElementById('res-bizno').innerText = verifyData.bizno || biznoBizno;
         document.getElementById('res-crno').innerText = verifyData.crno || '정보없음';
         document.getElementById('res-phone').innerText = verifyData.phone || '정보없음';
-        document.getElementById('res-address').innerText = (verifyData.address && verifyData.address.length > 5) ? verifyData.address : biznoAddress;
+        document.getElementById('res-address').innerText = verifyData.address || '정보없음';
         document.getElementById('res-status').innerText = verifyData.status || '조회 결과 없음';
 
         document.getElementById('resultCount').innerText =
@@ -304,7 +304,6 @@ async function searchCorp() {
     }
 }
 
-// 이벤트 리스너 연결
 document.addEventListener('DOMContentLoaded', () => {
     const searchButton = document.getElementById('searchButton');
     if (searchButton) {
