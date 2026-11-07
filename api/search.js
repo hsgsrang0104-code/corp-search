@@ -86,18 +86,25 @@ export default async function handler(req, res) {
         }
 
         // =====================================
-        // 2. 금융위원회 API (주소, 대표자, 전화번호, 법인번호 추출)
+        // 2. 금융위원회 API (사업자번호로 직접 상세 조회)
         // =====================================
         if (financeApiKey) {
             try {
                 const financeUrl = "https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpOutline_V2";
+                
+                // 사업자등록번호(bzno)가 있다면 번호로 우선 검색, 없으면 상호명으로 검색
                 const params = new URLSearchParams({
                     serviceKey: financeApiKey,
                     resultType: "json",
                     pageNo: "1",
-                    numOfRows: "10",
-                    corpNm: corpName
+                    numOfRows: "5"
                 });
+
+                if (businessNumber) {
+                    params.set("bzno", businessNumber);
+                } else {
+                    params.set("corpNm", corpName);
+                }
 
                 const finResponse = await fetch(`${financeUrl}?${params.toString()}`);
                 if (finResponse.ok) {
