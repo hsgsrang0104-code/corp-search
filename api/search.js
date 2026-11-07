@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+    // 1. 요청 방식 검증
     if (req.method !== "GET") {
         return res.status(405).json({
             success: false,
@@ -27,20 +28,21 @@ export default async function handler(req, res) {
         });
     }
 
-    // 번호 포맷팅 함수
+    // 유틸리티 함수: 사업자번호 포맷팅
     function formatBizNo(value) {
         const number = String(value || "").replace(/\D/g, "");
         if (number.length !== 10) return value || "정보없음";
         return number.replace(/^(\d{3})(\d{2})(\d{5})$/, "$1-$2-$3");
     }
 
+    // 유틸리티 함수: 법인번호 포맷팅
     function formatCorpNo(value) {
         const number = String(value || "").replace(/\D/g, "");
         if (number.length !== 13) return value || "정보없음";
         return number.replace(/^(\d{6})(\d{7})$/, "$1-$2");
     }
 
-    // 정규화 및 주소 매칭 함수
+    // 유틸리티 함수: 문자열 정규화 (공백, 특수문자 제거)
     function normalize(value) {
         return String(value || "")
             .replace(/주식회사|㈜|\(주\)|주\)/g, "")
@@ -49,6 +51,7 @@ export default async function handler(req, res) {
             .toLowerCase();
     }
 
+    // 유틸리티 함수: 주소 매칭 검증
     function matchAddress(companyAddress, searchAddress) {
         if (!searchAddress) return true;
         const company = normalize(companyAddress);
@@ -58,7 +61,7 @@ export default async function handler(req, res) {
 
     try {
         // =====================================
-        // [1단계] 비즈노 API 호출 (필수 출발점)
+        // [1단계] 비즈노 API 호출 (핵심 출발점)
         // =====================================
         const biznoUrl = new URL("https://bizno.net/api/fapi");
         biznoUrl.searchParams.set("key", biznoApiKey);
@@ -67,22 +70,21 @@ export default async function handler(req, res) {
         biznoUrl.searchParams.set("type", "json");
 
         const biznoResponse = await fetch(biznoUrl.toString());
-        const biznoRawText = await biznoResponse.text();
-
         if (!biznoResponse.ok) {
             return res.status(502).json({
                 success: false,
-                error: `비즈노 API HTTP 오류: ${biznoResponse.status}`
+                error: `비즈노 API 통신 오류 (HTTP 상태코드: ${biznoResponse.status})`
             });
         }
 
+        const biznoRawText = await biznoResponse.text();
         let biznoData;
         try {
             biznoData = JSON.parse(biznoRawText);
-        } catch {
+        } catch (e) {
             return res.status(502).json({
                 success: false,
-                error: "비즈노 응답이 JSON 형식이 아닙니다."
+                error: "비즈노 서버 응답이 올바른 JSON 형식이 아닙니다."
             });
         }
 
@@ -94,11 +96,12 @@ export default async function handler(req, res) {
             });
         }
 
+        // 데이터가 단일 객체이거나 배열일 경우 모두 안전하게 수용
         const rawItems = biznoData.items;
         let itemList = [];
         if (Array.isArray(rawItems)) {
             itemList = rawItems;
-        } else if (rawItems) {
+        } else if (rawItems && typeof rawItems === "object") {
             itemList = [rawItems];
         }
 
@@ -112,7 +115,7 @@ export default async function handler(req, res) {
             });
         }
 
-        // 검색어 및 주소 매칭으로 최적의 후보 선정
+        // 검색어 및 입력 주소(지역)를 기반으로 가장 적합한 후보 선정
         const searchName = normalize(corpName);
         const rankedItems = itemList.map(item => {
             const companyName = normalize(item.company);
@@ -138,7 +141,7 @@ export default async function handler(req, res) {
         let phoneNum = "정보없음";
 
         // =====================================
-        // [2단계] 국세청 API (독립 try-catch로 예외 차단)
+        // [2단계] 국세청 API (완전 독립형 예외 처리)
         // =====================================
         let ntsStatus = "국세청 조회 필요";
 
@@ -176,7 +179,7 @@ export default async function handler(req, res) {
                     ntsStatus = "국세청 조회 응답 오류";
                 }
             } catch (ntsError) {
-                console.warn("국세청 API 호출 중 예외 발생:", ntsError.message);
+                console.warn("국세청 API 호출 중 예외 발생 (기본 정보 유지):", ntsError.message);
                 ntsStatus = "국세청 조회 실패";
             }
         } else if (!ntsApiKey) {
@@ -184,7 +187,7 @@ export default async function handler(req, res) {
         }
 
         // =====================================
-        // [3단계] 금융위원회 API (독립 try-catch로 예외 차단)
+        // [3단계] 금융위원회 API (완전 독립형 예외 처리)
         // =====================================
         if (financeApiKey) {
             try {
@@ -222,7 +225,7 @@ export default async function handler(req, res) {
         }
 
         // =====================================
-        // 최종 결과 반환
+        // 최종 결과 반환 (비즈노 데이터 기반 보장)
         // =====================================
         return res.status(200).json({
             success: true,
@@ -239,7 +242,7 @@ export default async function handler(req, res) {
         });
 
     } catch (error) {
-        console.error("기업정보 통합 조회 치명적 오류:", error);
+        console.error("기업정보 통합 조회 중 치명적 오류:", error);
         return res.status(500).json({
             success: false,
             error: "서버 통신 실패",
