@@ -7,8 +7,8 @@ export default async function handler(req, res) {
     }
 
     const corpName = String(req.query.corpName || "").trim();
-    const address = String(req.query.address || "").trim();
     const queryBizno = String(req.query.bizno || "").trim();
+    const queryAddress = String(req.query.address || "").trim();
 
     if (!corpName) {
         return res.status(400).json({
@@ -44,12 +44,14 @@ export default async function handler(req, res) {
         let businessNumber = queryBizno.replace(/\D/g, "");
         let initialCompanyName = corpName;
         let initialCrno = "";
-        let initialAddress = address || "정보없음";
+        let initialAddress = queryAddress || "정보없음";
         let ceoName = "정보없음";
         let phoneNum = "정보없음";
         let ntsStatus = "국세청 조회 필요";
 
-        // 1. 국세청 API 검증 (독립 블록)
+        // =====================================
+        // 1. 국세청 API 사업자 상태 검증
+        // =====================================
         if (ntsApiKey && /^\d{10}$/.test(businessNumber)) {
             try {
                 const ntsUrl = "https://api.odcloud.kr/api/nts-businessman/v1/status";
@@ -88,7 +90,9 @@ export default async function handler(req, res) {
             ntsStatus = ntsApiKey ? "사업자번호 형식 오류" : "국세청 인증키 미설정";
         }
 
-        // 2. 금융위원회 API 보완 (독립 블록)
+        // =====================================
+        // 2. 금융위원회 API (상세 주소, 전화번호, 법인번호 보완)
+        // =====================================
         if (financeApiKey) {
             try {
                 const financeUrl = "https://apis.data.go.kr/1160100/service/GetCorpBasicInfoService_V2/getCorpOutline_V2";
@@ -96,7 +100,7 @@ export default async function handler(req, res) {
                     serviceKey: financeApiKey,
                     resultType: "json",
                     pageNo: "1",
-                    numOfRows: "5",
+                    numOfRows: "10",
                     corpNm: corpName
                 });
 
@@ -107,6 +111,7 @@ export default async function handler(req, res) {
                     const finItems = finData?.response?.body?.items?.item;
                     let finList = Array.isArray(finItems) ? finItems : (finItems ? [finItems] : []);
 
+                    // 사업자번호 또는 상호명으로 정확히 일치하는 항목 매칭
                     const matchedFin = finList.find(f => {
                         const fBiz = String(f.bzno || "").replace(/\D/g, "");
                         return fBiz === businessNumber || normalize(f.corpNm) === normalize(initialCompanyName);
@@ -115,15 +120,16 @@ export default async function handler(req, res) {
                     if (matchedFin) {
                         if (matchedFin.enpRprFnm) ceoName = matchedFin.enpRprFnm;
                         if (matchedFin.enpTlno) phoneNum = matchedFin.enpTlno;
-                        if (matchedFin.enpBsadr) initialAddress = matchedFin.enpBsadr;
+                        if (matchedFin.enpBsadr) initialAddress = matchedFin.enpBsadr; // 상세 주소 우선 반영
                         if (matchedFin.crno) initialCrno = matchedFin.crno;
                     }
                 }
             } catch (finErr) {
-                console.warn("금융위원회 API 예외 (무시됨):", finErr.message);
+                console.warn("금융위원회 API 예외:", finErr.message);
             }
         }
 
+        // 만약 금융위에서 주소를 못 가져왔거나 기본값(대전 서구 등 짧은 주소)이라면, 프론트엔드에서 넘어온 주소를 최대한 유지
         return res.status(200).json({
             success: true,
             corpName: initialCompanyName,
@@ -133,7 +139,7 @@ export default async function handler(req, res) {
             phone: phoneNum,
             address: initialAddress,
             status: ntsStatus,
-            source: "비즈노(브라우저) + 국세청 + 금융위원회"
+            source: "비즈노 + 국세청 + 금융위원회"
         });
 
     } catch (error) {
