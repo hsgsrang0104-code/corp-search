@@ -1,13 +1,18 @@
 
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
 
     <title>기업 정보 조회 시스템</title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
@@ -105,7 +110,6 @@
             justify-content: space-between;
             align-items: flex-start;
             gap: 15px;
-            margin-bottom: 0;
             border-bottom: 1px solid #edf2f7;
             padding: 13px 0;
         }
@@ -149,6 +153,7 @@
         }
 
         @media (max-width: 500px) {
+
             body {
                 padding: 10px;
             }
@@ -164,9 +169,13 @@
             .result-label {
                 min-width: 105px;
             }
+
         }
+
     </style>
+
 </head>
+
 
 <body>
 
@@ -174,10 +183,14 @@
 
     <h2>🏢 기업 정보 조회 시스템</h2>
 
-    <!-- 검색 조건 -->
+
+    <!-- 상호명 입력 -->
 
     <div class="form-group">
-        <label for="corpName">상호명 *필수</label>
+
+        <label for="corpName">
+            상호명 *필수
+        </label>
 
         <input
             type="text"
@@ -185,10 +198,17 @@
             placeholder="예: 세진밀레니엄에이"
             autocomplete="organization"
         >
+
     </div>
 
+
+    <!-- 소재지 입력 -->
+
     <div class="form-group">
-        <label for="address">소재지 / 주소 (선택)</label>
+
+        <label for="address">
+            소재지 / 주소 (선택)
+        </label>
 
         <input
             type="text"
@@ -199,27 +219,41 @@
         <div class="help-text">
             동명 기업이 여러 곳일 경우 후보를 구분하는 데 활용합니다.
         </div>
+
     </div>
+
 
     <!-- 조회 버튼 -->
 
-    <button id="searchButton" onclick="searchCorp()">
+    <button
+        id="searchButton"
+        onclick="searchCorp()"
+    >
         조회하기
     </button>
 
-    <!-- 로딩 -->
+
+    <!-- 조회 중 -->
 
     <div class="loading" id="loading">
         기업 정보를 검색하고 있습니다...
     </div>
 
-    <!-- 오류 표시 -->
 
-    <div class="error-message" id="errorMessage"></div>
+    <!-- 오류 메시지 -->
+
+    <div
+        class="error-message"
+        id="errorMessage"
+    ></div>
+
 
     <!-- 검색 결과 -->
 
-    <div class="result-box" id="resultBox">
+    <div
+        class="result-box"
+        id="resultBox"
+    >
 
         <div class="result-item">
             <span class="result-label">상호</span>
@@ -253,10 +287,30 @@
 
         <div class="result-item">
             <span class="result-label">사업자상태</span>
-            <span class="result-value" id="res-status">확인필요</span>
+            <span class="result-value" id="res-status">조회 전</span>
         </div>
 
-        <div class="result-count" id="resultCount"></div>
+        <!-- 폐업일자는 폐업한 경우에만 표시 -->
+
+        <div
+            class="result-item"
+            id="endDateRow"
+            style="display:none;"
+        >
+
+            <span class="result-label">폐업일자</span>
+
+            <span
+                class="result-value"
+                id="res-endDate"
+            ></span>
+
+        </div>
+
+        <div
+            class="result-count"
+            id="resultCount"
+        ></div>
 
     </div>
 
@@ -266,7 +320,7 @@
 <script>
 
 // =====================================
-// 1. 기업정보 조회 함수
+// 1. 기업정보 조회
 // =====================================
 
 async function searchCorp() {
@@ -290,27 +344,36 @@ async function searchCorp() {
         document.getElementById('searchButton');
 
 
-    // 상호명 입력 확인
+    // 상호명 확인
 
     if (!corpName) {
+
         alert("상호명을 입력해 주세요.");
+
         document.getElementById('corpName').focus();
+
         return;
+
     }
 
 
-    // 기존 결과 및 오류 초기화
+    // 기존 결과 초기화
 
     resultBox.style.display = 'none';
+
     errorMessage.style.display = 'none';
 
     errorMessage.innerText = '';
 
-    // 로딩 표시
+    document.getElementById('endDateRow').style.display = 'none';
+
+
+    // 로딩 시작
 
     loading.style.display = 'block';
 
     searchButton.disabled = true;
+
     searchButton.innerText = '조회 중...';
 
 
@@ -321,8 +384,11 @@ async function searchCorp() {
         // =====================================
 
         const params = new URLSearchParams({
+
             corpName: corpName,
+
             address: address
+
         });
 
         const response = await fetch(
@@ -331,42 +397,27 @@ async function searchCorp() {
 
 
         // =====================================
-        // 3. JSON 응답 확인
+        // 3. 응답 데이터 확인
         // =====================================
 
         const data = await response.json();
 
-        console.log("기업정보 API 응답:", data);
+        console.log("기업정보 조회 결과:", data);
 
 
-        // 서버 오류 확인
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                `서버 오류 (${response.status})`
-            );
-
-        }
-
-
-        // API 검색 실패 확인
-
-        if (data.success === false) {
+        if (!response.ok || data.success === false) {
 
             throw new Error(
                 data.error ||
                 data.resultMsg ||
-                data.address ||
-                "기업정보를 찾을 수 없습니다."
+                "기업정보 조회에 실패했습니다."
             );
 
         }
 
 
         // =====================================
-        // 4. 검색 결과 화면 출력
+        // 4. 기본 기업정보 표시
         // =====================================
 
         document.getElementById('res-corpName').innerText =
@@ -374,6 +425,8 @@ async function searchCorp() {
 
         document.getElementById('res-ceoNm').innerText =
             data.ceoNm || '정보없음';
+
+        // 하이픈이 적용된 번호를 그대로 표시
 
         document.getElementById('res-bizno').innerText =
             data.bizno || '정보없음';
@@ -387,32 +440,67 @@ async function searchCorp() {
         document.getElementById('res-address').innerText =
             data.address || '정보없음';
 
+
+        // =====================================
+        // 5. 국세청 사업자 상태 표시
+        // =====================================
+
         document.getElementById('res-status').innerText =
-            data.status || '확인필요';
+            data.status || '조회 결과 없음';
 
 
-        // 검색 결과 건수
+        // 폐업일자 표시
 
-        const count = data.totalCount ?? 0;
+        if (
+            data.endDate &&
+            data.status === '폐업자'
+        ) {
+
+            document.getElementById('res-endDate').innerText =
+                data.endDate;
+
+            document.getElementById('endDateRow').style.display =
+                'flex';
+
+        }
+
+
+        // =====================================
+        // 6. 조회 건수 표시
+        // =====================================
 
         document.getElementById('resultCount').innerText =
-            `전체 검색 결과 ${count}건 / 반환 결과 ${data.returnedCount ?? 0}건`;
+
+            `전체 검색 결과 ${data.totalCount ?? 0}건 / ` +
+            `반환 결과 ${data.returnedCount ?? 0}건`;
 
 
         // 결과 표시
 
         resultBox.style.display = 'block';
 
+
+        // 국세청 조회 실패 시 상세 오류 확인
+
+        if (data.ntsError) {
+
+            console.warn(
+                "국세청 상태조회 오류:",
+                data.ntsError
+            );
+
+        }
+
     }
 
 
     // =====================================
-    // 5. 오류 처리
+    // 7. 오류 처리
     // =====================================
 
     catch (error) {
 
-        console.error("기업정보 조회 오류:", error);
+        console.error("조회 오류:", error);
 
         errorMessage.innerText =
             "조회 중 오류가 발생했습니다.\n\n" +
@@ -424,7 +512,7 @@ async function searchCorp() {
 
 
     // =====================================
-    // 6. 조회 완료 후 초기화
+    // 8. 조회 완료
     // =====================================
 
     finally {
@@ -441,7 +529,7 @@ async function searchCorp() {
 
 
 // =====================================
-// 7. Enter 키로 검색 가능
+// 9. Enter 키로 검색
 // =====================================
 
 document.getElementById('corpName')
@@ -466,4 +554,6 @@ document.getElementById('address')
 </script>
 
 </body>
+
 </html>
+
