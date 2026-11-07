@@ -178,6 +178,7 @@
 </div>
 
 <script>
+<script>
 async function searchCorp() {
     const corpName = document.getElementById('corpName').value.trim();
     const address = document.getElementById('address').value.trim();
@@ -201,26 +202,81 @@ async function searchCorp() {
     searchButton.innerText = '조회 중...';
 
     try {
-        const params = new URLSearchParams({ corpName, address });
-        const response = await fetch(`/api/search?${params.toString()}`);
-        const data = await response.json();
+        // [1단계] 브라우저(클라이언트)에서 직접 비즈노 API 호출 (국내 IP 활용)
+        const biznoApiKey = "HhBUJ3jOITJpAxdtEcKm20SZlTBoIwdN"; // 본인의 비즈노 API 키
+        const biznoUrl = `https://bizno.net/api/fapi?key=${encodeURIComponent(biznoApiKey)}&gb=3&q=${encodeURIComponent(corpName)}&type=json`;
 
-        if (!response.ok || data.success === false) {
-            throw new Error(data.error || "기업정보 조회에 실패했습니다.");
+        const biznoResponse = await fetch(biznoUrl);
+        if (!biznoResponse.ok) {
+            throw new Error(`비즈노 API 통신 실패 (HTTP 상태: ${biznoResponse.status})`);
         }
 
-        document.getElementById('res-corpName').innerText = data.corpName || '정보없음';
-        document.getElementById('res-ceoNm').innerText = data.ceoNm || '정보없음';
-        document.getElementById('res-bizno').innerText = data.bizno || '정보없음';
-        document.getElementById('res-crno').innerText = data.crno || '정보없음';
-        document.getElementById('res-phone').innerText = data.phone || '정보없음';
-        document.getElementById('res-address').innerText = data.address || '정보없음';
-        document.getElementById('res-status').innerText = data.status || '조회 결과 없음';
+        const biznoData = await biznoResponse.json();
+        if (biznoData.resultCode !== 0 && biznoData.resultCode !== "0") {
+            throw new Error(`비즈노 검색 결과 없음: ${biznoData.resultMsg || '결과 없음'}`);
+        }
+
+        const rawItems = biznoData.items;
+        let itemList = Array.isArray(rawItems) ? rawItems : (rawItems ? [rawItems] : []);
+
+        if (itemList.length === 0) {
+            throw new Error("해당 상호명으로 등록된 기업정보가 비즈노에 없습니다.");
+        }
+
+        // 주소 및 상호 매칭 함수
+        function normalize(val) {
+            return String(val || "").replace(/주식회사|㈜|\(주\)|주\)/g, "").replace(/\s/g, "").replace(/[()（）]/g, "").toLowerCase();
+        }
+
+        const searchName = normalize(corpName);
+        const rankedItems = itemList.map(item => {
+            const companyName = normalize(item.company);
+            const companyAddress = item.address || item.addr || "";
+            let score = 0;
+            if (companyName === searchName) score += 100;
+            else if (companyName.includes(searchName) || searchName.includes(companyName)) score += 50;
+            if (address && companyAddress.includes(address)) score += 100;
+            return { item, score };
+        });
+
+        rankedItems.sort((a, b) => b.score - a.score);
+        const target = rankedItems[0].item;
+
+        // [2단계 & 3단계] 확보한 사업자번호로 국세청 및 금융위 검증을 위해 백엔드(/api/search) 호출
+        const params = new URLSearchParams({
+            corpName: target.company || corpName,
+            bizno: target.bno || "",
+            address: target.address || target.addr || address
+        });
+
+        const verifyResponse = await fetch(`/api/search?${params.toString()}`);
+        const responseText = await verifyResponse.text();
+
+        let verifyData;
+        try {
+            verifyData = JSON.parse(responseText);
+        } catch (e) {
+            throw new Error("서버 응답이 올바른 형식이 아닙니다:\n" + responseText.substring(0, 300));
+        }
+
+        if (!verifyResponse.ok || verifyData.success === false) {
+            throw new Error(verifyData.error || "추가 검증 중 오류가 발생했습니다.");
+        }
+
+        // 화면에 결과 출력
+        document.getElementById('res-corpName').innerText = verifyData.corpName || '정보없음';
+        document.getElementById('res-ceoNm').innerText = verifyData.ceoNm || '정보없음';
+        document.getElementById('res-bizno').innerText = verifyData.bizno || '정보없음';
+        document.getElementById('res-crno').innerText = verifyData.crno || '정보없음';
+        document.getElementById('res-phone').innerText = verifyData.phone || '정보없음';
+        document.getElementById('res-address').innerText = verifyData.address || '정보없음';
+        document.getElementById('res-status').innerText = verifyData.status || '조회 결과 없음';
 
         document.getElementById('resultCount').innerText =
-            `전체 검색 결과 ${data.totalCount ?? 0}건 / 반환 결과 ${data.returnedCount ?? 0}건`;
+            `전체 검색 결과 ${biznoData.totalCount ?? itemList.length}건 / 반환 결과 ${itemList.length}건`;
 
         resultBox.style.display = 'block';
+
     } catch (error) {
         console.error("조회 오류:", error);
         errorMessage.innerText = "조회 중 오류가 발생했습니다.\n\n" + error.message;
@@ -232,13 +288,6 @@ async function searchCorp() {
     }
 }
 
-document.getElementById('corpName').addEventListener('keydown', event => {
-    if (event.key === 'Enter') searchCorp();
-});
-document.getElementById('address').addEventListener('keydown', event => {
-    if (event.key === 'Enter') searchCorp();
-});
+document.getElementById('corpName').addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
+document.getElementById('address').addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
 </script>
-
-</body>
-</html>
