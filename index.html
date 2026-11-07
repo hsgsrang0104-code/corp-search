@@ -203,7 +203,7 @@ async function searchCorp() {
     }
 
     try {
-        // [1단계] 브라우저에서 직접 비즈노 API 호출
+        // [1단계] 브라우저에서 직접 비즈노 API 호출 (CORS 우회 및 국내 IP 활용)
         const biznoApiKey = "HhBUJ3jOITJpAxdtEcKm20SZlTBoIwdN";
         const biznoUrl = `https://bizno.net/api/fapi?key=${encodeURIComponent(biznoApiKey)}&gb=3&q=${encodeURIComponent(corpName)}&type=json`;
 
@@ -218,10 +218,15 @@ async function searchCorp() {
         }
 
         const rawItems = biznoData.items;
-        let itemList = Array.isArray(rawItems) ? rawItems : (rawItems ? [rawItems] : []);
+        let itemList = [];
+        if (Array.isArray(rawItems)) {
+            itemList = rawItems.filter(item => item && typeof item === 'object');
+        } else if (rawItems && typeof rawItems === 'object') {
+            itemList = [rawItems];
+        }
 
         if (itemList.length === 0) {
-            throw new Error("해당 상호명으로 등록된 기업정보가 비즈노에 없습니다.");
+            throw new Error("해당 상호명으로 등록된 유효한 기업정보가 비즈노에 없습니다.");
         }
 
         function normalize(val) {
@@ -230,7 +235,7 @@ async function searchCorp() {
 
         const searchName = normalize(corpName);
         const rankedItems = itemList.map(item => {
-            const companyName = normalize(item.company);
+            const companyName = normalize(item.company || item.name || "");
             const companyAddress = item.address || item.addr || "";
             let score = 0;
             if (companyName === searchName) score += 100;
@@ -240,6 +245,11 @@ async function searchCorp() {
         });
 
         rankedItems.sort((a, b) => b.score - a.score);
+
+        if (!rankedItems[0] || !rankedItems[0].item) {
+            throw new Error("검색된 기업의 상세 정보를 불러올 수 없습니다.");
+        }
+
         const target = rankedItems[0].item;
 
         // [2 & 3단계] 백엔드 검증 호출
@@ -292,7 +302,7 @@ async function searchCorp() {
     }
 }
 
-// 버튼 클릭 및 엔터 키 이벤트 안전하게 연결
+// 이벤트 리스너 연결
 document.addEventListener('DOMContentLoaded', () => {
     const searchButton = document.getElementById('searchButton');
     if (searchButton) {
