@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     }
 
     function matchAddress(companyAddress, searchAddress) {
-        if (!searchAddress) return true; // 주소 미입력시 통과
+        if (!searchAddress) return true;
         const company = normalize(companyAddress);
         const keywords = searchAddress.split(/\s+/).filter(Boolean).map(normalize);
         return keywords.length > 0 && keywords.every(keyword => company.includes(keyword));
@@ -58,8 +58,7 @@ export default async function handler(req, res) {
 
     try {
         // =====================================
-        // 1단계: 비즈노 API (상호명 검색)
-        // ※ area 파라미터는 제외하고 q(상호명)만으로 조회하여 누락 방지
+        // 1단계: 비즈노 API 호출 (상호명 검색)
         // =====================================
         const biznoUrl = new URL("https://bizno.net/api/fapi");
         biznoUrl.searchParams.set("key", biznoApiKey);
@@ -97,7 +96,15 @@ export default async function handler(req, res) {
             });
         }
 
-        const itemList = biznoData.items || [];
+        // items가 단일 객체이거나 배열일 경우 모두 안전하게 처리
+        const rawItems = biznoData.items;
+        let itemList = [];
+        if (Array.isArray(rawItems)) {
+            itemList = rawItems;
+        } else if (rawItems) {
+            itemList = [rawItems];
+        }
+
         const totalCount = Number(biznoData.totalCount || itemList.length);
 
         if (itemList.length === 0) {
@@ -118,7 +125,7 @@ export default async function handler(req, res) {
             if (companyName === searchName) score += 100;
             else if (companyName.includes(searchName) || searchName.includes(companyName)) score += 50;
 
-            if (address && matchAddress(companyAddress, address)) score += 50;
+            if (address && matchAddress(companyAddress, address)) score += 100;
 
             return { item, score };
         });
@@ -130,7 +137,7 @@ export default async function handler(req, res) {
         let initialCompanyName = target.company || corpName;
         let initialCrno = target.cno || "";
         let initialAddress = target.address || target.addr || "정보없음";
-        let ceoName = "정보없음";
+        let ceoName = target.ceo || "정보없음"; // 비즈노 결과에 대표자가 있다면 우선 반영
         let phoneNum = "정보없음";
 
         // =====================================
@@ -138,11 +145,7 @@ export default async function handler(req, res) {
         // =====================================
         let ntsStatus = "국세청 조회 필요";
 
-        if (!ntsApiKey) {
-            ntsStatus = "국세청 인증키 미설정";
-        } else if (!/^\d{10}$/.test(businessNumber)) {
-            ntsStatus = "사업자등록번호 형식 오류";
-        } else {
+        if (ntsApiKey && /^\d{10}$/.test(businessNumber)) {
             try {
                 const ntsUrl = new URL("https://api.odcloud.kr/api/nts-businessman/v1/status");
                 ntsUrl.searchParams.set("serviceKey", ntsApiKey);
@@ -164,22 +167,15 @@ export default async function handler(req, res) {
                         item => String(item.b_no || "").replace(/\D/g, "") === businessNumber
                     );
 
-                    if (!ntsResult) {
-                        ntsStatus = "국세청 조회 결과 없음";
-                    } else if (ntsResult.b_stt_cd === "01") {
-                        ntsStatus = "계속사업자";
-                    } else if (ntsResult.b_stt_cd === "02") {
-                        ntsStatus = "휴업자";
-                    } else if (ntsResult.b_stt_cd === "03") {
-                        ntsStatus = "폐업자";
-                    } else {
-                        ntsStatus = ntsResult.b_stt || "정보 확인 필요";
+                    if (ntsResult) {
+                        if (ntsResult.b_stt_cd === "01") ntsStatus = "계속사업자";
+                        else if (ntsResult.b_stt_cd === "02") ntsStatus = "휴업자";
+                        else if (ntsResult.b_stt_cd === "03") ntsStatus = "폐업자";
+                        else ntsStatus = ntsResult.b_stt || "정보 확인 필요";
                     }
-                } else {
-                    ntsStatus = "국세청 조회 HTTP 오류";
                 }
             } catch (error) {
-                console.error("국세청 API 오류:", error);
+                console.warn("국세청 API 조회 예외:", error.message);
                 ntsStatus = "국세청 조회 오류";
             }
         }
