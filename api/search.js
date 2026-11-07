@@ -58,7 +58,7 @@ export default async function handler(req, res) {
 
     try {
         // =====================================
-        // 1단계: 비즈노 API 호출 (상호명 검색)
+        // [1단계] 비즈노 API 호출 (필수 출발점)
         // =====================================
         const biznoUrl = new URL("https://bizno.net/api/fapi");
         biznoUrl.searchParams.set("key", biznoApiKey);
@@ -72,8 +72,7 @@ export default async function handler(req, res) {
         if (!biznoResponse.ok) {
             return res.status(502).json({
                 success: false,
-                error: `비즈노 API HTTP 오류: ${biznoResponse.status}`,
-                detail: biznoRawText.substring(0, 300)
+                error: `비즈노 API HTTP 오류: ${biznoResponse.status}`
             });
         }
 
@@ -83,8 +82,7 @@ export default async function handler(req, res) {
         } catch {
             return res.status(502).json({
                 success: false,
-                error: "비즈노 응답이 JSON 형식이 아닙니다.",
-                detail: biznoRawText.substring(0, 300)
+                error: "비즈노 응답이 JSON 형식이 아닙니다."
             });
         }
 
@@ -96,7 +94,6 @@ export default async function handler(req, res) {
             });
         }
 
-        // items가 단일 객체이거나 배열일 경우 모두 안전하게 처리
         const rawItems = biznoData.items;
         let itemList = [];
         if (Array.isArray(rawItems)) {
@@ -137,11 +134,11 @@ export default async function handler(req, res) {
         let initialCompanyName = target.company || corpName;
         let initialCrno = target.cno || "";
         let initialAddress = target.address || target.addr || "정보없음";
-        let ceoName = target.ceo || "정보없음"; // 비즈노 결과에 대표자가 있다면 우선 반영
+        let ceoName = target.ceo || "정보없음";
         let phoneNum = "정보없음";
 
         // =====================================
-        // 2단계: 국세청 API (사업자 상태 검증)
+        // [2단계] 국세청 API (독립 try-catch로 예외 차단)
         // =====================================
         let ntsStatus = "국세청 조회 필요";
 
@@ -172,16 +169,22 @@ export default async function handler(req, res) {
                         else if (ntsResult.b_stt_cd === "02") ntsStatus = "휴업자";
                         else if (ntsResult.b_stt_cd === "03") ntsStatus = "폐업자";
                         else ntsStatus = ntsResult.b_stt || "정보 확인 필요";
+                    } else {
+                        ntsStatus = "국세청 등록정보 없음";
                     }
+                } else {
+                    ntsStatus = "국세청 조회 응답 오류";
                 }
-            } catch (error) {
-                console.warn("국세청 API 조회 예외:", error.message);
-                ntsStatus = "국세청 조회 오류";
+            } catch (ntsError) {
+                console.warn("국세청 API 호출 중 예외 발생:", ntsError.message);
+                ntsStatus = "국세청 조회 실패";
             }
+        } else if (!ntsApiKey) {
+            ntsStatus = "국세청 인증키 미설정";
         }
 
         // =====================================
-        // 3단계: 금융위원회 API (보완 정보 조회 - 실패해도 비즈노 결과 유지)
+        // [3단계] 금융위원회 API (독립 try-catch로 예외 차단)
         // =====================================
         if (financeApiKey) {
             try {
@@ -213,8 +216,8 @@ export default async function handler(req, res) {
                         if (matchedFin.crno) initialCrno = matchedFin.crno;
                     }
                 }
-            } catch (e) {
-                console.warn("금융위원회 보완 조회 생략 (비즈노 데이터 우선 사용):", e.message);
+            } catch (finError) {
+                console.warn("금융위원회 API 보완 조회 중 예외 발생 (비즈노 데이터 유지):", finError.message);
             }
         }
 
@@ -236,7 +239,7 @@ export default async function handler(req, res) {
         });
 
     } catch (error) {
-        console.error("기업정보 통합 조회 오류:", error);
+        console.error("기업정보 통합 조회 치명적 오류:", error);
         return res.status(500).json({
             success: false,
             error: "서버 통신 실패",
