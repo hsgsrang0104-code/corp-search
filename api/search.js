@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     try {
         let businessNumber = queryBizno.replace(/\D/g, "");
         let initialCompanyName = corpName;
-        let initialCrno = "";
+        let initialCrno = "정보없음";
         let initialAddress = queryAddress || "정보없음";
         let ceoName = "정보없음";
         let phoneNum = "정보없음";
@@ -79,19 +79,14 @@ export default async function handler(req, res) {
                     } else {
                         ntsStatus = "국세청 등록정보 없음";
                     }
-                } else {
-                    ntsStatus = "국세청 응답 오류";
                 }
-            } catch (ntsErr) {
-                console.warn("국세청 API 예외:", ntsErr.message);
+            } catch (e) {
                 ntsStatus = "국세청 조회 실패";
             }
-        } else {
-            ntsStatus = ntsApiKey ? "사업자번호 형식 오류" : "국세청 인증키 미설정";
         }
 
         // =====================================
-        // 2. 금융위원회 API (상세 주소, 전화번호, 법인번호 보완)
+        // 2. 금융위원회 API (주소, 대표자, 전화번호, 법인번호 추출)
         // =====================================
         if (financeApiKey) {
             try {
@@ -111,7 +106,6 @@ export default async function handler(req, res) {
                     const finItems = finData?.response?.body?.items?.item;
                     let finList = Array.isArray(finItems) ? finItems : (finItems ? [finItems] : []);
 
-                    // 사업자번호 또는 상호명으로 정확히 일치하는 항목 매칭
                     const matchedFin = finList.find(f => {
                         const fBiz = String(f.bzno || "").replace(/\D/g, "");
                         return fBiz === businessNumber || normalize(f.corpNm) === normalize(initialCompanyName);
@@ -120,16 +114,15 @@ export default async function handler(req, res) {
                     if (matchedFin) {
                         if (matchedFin.enpRprFnm) ceoName = matchedFin.enpRprFnm;
                         if (matchedFin.enpTlno) phoneNum = matchedFin.enpTlno;
-                        if (matchedFin.enpBsadr) initialAddress = matchedFin.enpBsadr; // 상세 주소 우선 반영
+                        if (matchedFin.enpBsadr) initialAddress = matchedFin.enpBsadr;
                         if (matchedFin.crno) initialCrno = matchedFin.crno;
                     }
                 }
-            } catch (finErr) {
-                console.warn("금융위원회 API 예외:", finErr.message);
+            } catch (e) {
+                console.warn("금융위원회 API 조회 실패:", e.message);
             }
         }
 
-        // 만약 금융위에서 주소를 못 가져왔거나 기본값(대전 서구 등 짧은 주소)이라면, 프론트엔드에서 넘어온 주소를 최대한 유지
         return res.status(200).json({
             success: true,
             corpName: initialCompanyName,
@@ -143,10 +136,9 @@ export default async function handler(req, res) {
         });
 
     } catch (error) {
-        console.error("서버 내부 치명적 오류:", error);
         return res.status(500).json({
             success: false,
-            error: "서버 처리 중 오류가 발생했습니다: " + error.message
+            error: "서버 처리 중 오류 발생: " + error.message
         });
     }
 }
