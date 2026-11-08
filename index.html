@@ -24,7 +24,7 @@
         h2 {
             text-align: center;
             color: #1a365d;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }
         .form-group { margin-bottom: 18px; }
         label {
@@ -67,6 +67,57 @@
             display: none;
             font-size: 15px;
         }
+        
+        /* 후보 리스트 목록 스타일 */
+        .candidate-box {
+            margin-top: 25px;
+            display: none;
+        }
+        .candidate-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: #4a5568;
+            margin-bottom: 12px;
+        }
+        .candidate-card {
+            background: #fff;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .candidate-card:hover {
+            border-color: #2b6cb0;
+            background-color: #f0f7ff;
+            transform: translateY(-2px);
+        }
+        .candidate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .candidate-name {
+            font-weight: bold;
+            font-size: 17px;
+            color: #1a365d;
+        }
+        .candidate-status {
+            font-size: 13px;
+            padding: 3px 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            color: #4a5568;
+        }
+        .candidate-sub {
+            font-size: 14px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        /* 최종 결과 박스 스타일 */
         .result-box {
             margin-top: 30px;
             padding: 20px 25px;
@@ -93,11 +144,13 @@
             text-align: right;
             word-break: break-all;
         }
-        .result-count {
-            color: #718096;
-            font-size: 13px;
-            margin-top: 12px;
-            text-align: right;
+        .badge-source {
+            font-size: 11px;
+            background: #ebf8ff;
+            color: #2b6cb0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
         }
         .error-message {
             display: none;
@@ -119,180 +172,115 @@
     </style>
 </head>
 <body>
-
+    
 <div class="container">
     <h2>🏢 기업 정보 조회 시스템</h2>
-
+    
     <div class="form-group">
         <label for="corpName">상호명 *필수</label>
         <input type="text" id="corpName" placeholder="예: 탑안전공사" autocomplete="organization">
     </div>
-
+    
     <div class="form-group">
         <label for="address">소재지 / 주소 (선택)</label>
         <input type="text" id="address" placeholder="예: 대전 서구">
-        <div class="help-text">동명 기업이 여러 곳일 경우 후보를 구분하는 데 활용합니다.</div>
+        <div class="help-text">동명 기업이 여러 곳일 경우 검색 필터링에 활용합니다.</div>
     </div>
-
+    
     <button id="searchButton" type="button">조회하기</button>
-
+    
     <div class="loading" id="loading">기업 정보를 검색하고 있습니다...</div>
     <div class="error-message" id="errorMessage"></div>
+    
+    <!-- 후보 기업 선택 리스트 -->
+    <div class="candidate-box" id="candidateBox">
+        <div class="candidate-title">💡 검색 결과 중 해당되는 기업을 선택해 주세요:</div>
+        <div id="candidateList"></div>
+    </div>
 
+    <!-- 최종 결과 출력 박스 -->
     <div class="result-box" id="resultBox">
         <div class="result-item">
             <span class="result-label">상호</span>
             <span class="result-value" id="res-corpName">정보없음</span>
         </div>
         <div class="result-item">
-            <span class="result-label">대표자명</span>
-            <span class="result-value" id="res-ceoNm">정보없음</span>
-        </div>
-        <div class="result-item">
             <span class="result-label">사업자등록번호</span>
             <span class="result-value" id="res-bizno">정보없음</span>
-        </div>
-        <div class="result-item">
-            <span class="result-label">법인등록번호</span>
-            <span class="result-value" id="res-crno">정보없음</span>
         </div>
         <div class="result-item">
             <span class="result-label">전화번호</span>
             <span class="result-value" id="res-phone">정보없음</span>
         </div>
         <div class="result-item">
-            <span class="result-label">주소</span>
-            <span class="result-value" id="res-address">정보없음</span>
-        </div>
-        <div class="result-item">
             <span class="result-label">사업자상태</span>
             <span class="result-value" id="res-status">조회 전</span>
         </div>
-        <div class="result-count" id="resultCount"></div>
+        <div class="result-item">
+            <span class="result-label">주소</span>
+            <span class="result-value">
+                <span id="res-address">정보없음</span>
+                <span class="badge-source" id="res-addrSource"></span>
+            </span>
+        </div>
     </div>
 </div>
-
+    
 <script>
 async function searchCorp() {
     const corpNameInput = document.getElementById('corpName');
     const addressInput = document.getElementById('address');
     const loading = document.getElementById('loading');
     const resultBox = document.getElementById('resultBox');
+    const candidateBox = document.getElementById('candidateBox');
     const errorMessage = document.getElementById('errorMessage');
     const searchButton = document.getElementById('searchButton');
-
+    
     const corpName = corpNameInput ? corpNameInput.value.trim() : "";
     const address = addressInput ? addressInput.value.trim() : "";
-
+    
     if (!corpName) {
         alert("상호명을 입력해 주세요.");
         if (corpNameInput) corpNameInput.focus();
         return;
     }
-
+    
     if (resultBox) resultBox.style.display = 'none';
+    if (candidateBox) candidateBox.style.display = 'none';
     if (errorMessage) {
         errorMessage.style.display = 'none';
         errorMessage.innerText = '';
     }
-
+    
     if (loading) loading.style.display = 'block';
     if (searchButton) {
         searchButton.disabled = true;
         searchButton.innerText = '조회 중...';
     }
-
+    
     try {
-        // [1단계] 브라우저에서 직접 비즈노 무료 API 호출 (국내 IP 활용 및 해외 IP 차단 우회)
-        const biznoApiKey = "HhBUJ3jOITJpAxdtEcKm20SZlTBoIwdN";
-        const biznoUrl = `https://bizno.net/api/fapi?key=${encodeURIComponent(biznoApiKey)}&gb=3&q=${encodeURIComponent(corpName)}&type=json`;
+        // [1단계] Vercel 백엔드 호출 (1차 상호 검색)
+        const params = new URLSearchParams({ corpName, address });
+        const res = await fetch(`/api/search?${params.toString()}`);
+        const data = await res.json();
 
-        const biznoResponse = await fetch(biznoUrl);
-        if (!biznoResponse.ok) {
-            throw new Error(`비즈노 API 통신 실패 (HTTP 상태: ${biznoResponse.status})`);
+        if (!res.ok || data.success === false) {
+            throw new Error(data.error || "기업 정보 검색에 실패했습니다.");
         }
 
-        const biznoData = await biznoResponse.json();
-        if (biznoData.resultCode !== 0 && biznoData.resultCode !== "0") {
-            throw new Error(`비즈노 검색 결과 없음: ${biznoData.resultMsg || '결과 없음'}`);
+        // 후보 기업이 여러 개일 경우 선택 화면 출력
+        if (data.mode === "list" && data.candidates) {
+            if (data.candidates.length === 1) {
+                // 후보가 1개인 경우 바로 2차 상세조회 수행
+                await selectCandidate(data.candidates[0]);
+            } else {
+                renderCandidates(data.candidates);
+            }
         }
-
-        const rawItems = biznoData.items;
-        let itemList = [];
-        if (Array.isArray(rawItems)) {
-            itemList = rawItems.filter(item => item && typeof item === 'object');
-        } else if (rawItems && typeof rawItems === 'object') {
-            itemList = [rawItems];
-        }
-
-        if (itemList.length === 0) {
-            throw new Error("해당 상호명으로 등록된 기업정보가 비즈노에 없습니다.");
-        }
-
-        function normalize(val) {
-            return String(val || "").replace(/주식회사|㈜|\(주\)|주\)/g, "").replace(/\s/g, "").replace(/[()（）]/g, "").toLowerCase();
-        }
-
-        const searchName = normalize(corpName);
-        const rankedItems = itemList.map(item => {
-            const companyName = normalize(item.company || item.name || "");
-            const companyAddress = item.address || item.addr || "";
-            let score = 0;
-            if (companyName === searchName) score += 100;
-            else if (companyName.includes(searchName) || searchName.includes(companyName)) score += 50;
-            if (address && companyAddress.includes(address)) score += 100;
-            return { item, score };
-        });
-
-        rankedItems.sort((a, b) => b.score - a.score);
-
-        if (!rankedItems[0] || !rankedItems[0].item) {
-            throw new Error("검색된 기업 정보를 처리할 수 없습니다.");
-        }
-
-        const target = rankedItems[0].item;
-        const biznoBizno = target.bno || "";
-        const biznoCorpName = target.company || corpName;
-
-        // [2 & 3단계] 확보한 사업자번호와 상호명을 백엔드로 전달하여 공공데이터(대표자, 주소, 전화번호 등) 조회
-        const params = new URLSearchParams({
-            corpName: biznoCorpName,
-            bizno: biznoBizno,
-            address: address
-        });
-
-        const verifyResponse = await fetch(`/api/search?${params.toString()}`);
-        const responseText = await verifyResponse.text();
-
-        let verifyData;
-        try {
-            verifyData = JSON.parse(responseText);
-        } catch (e) {
-            throw new Error("서버 응답 오류:\n" + responseText.substring(0, 300));
-        }
-
-        if (!verifyResponse.ok || verifyData.success === false) {
-            throw new Error(verifyData.error || "상세 정보 조회 중 오류가 발생했습니다.");
-        }
-
-        // 결과 화면 반영
-        document.getElementById('res-corpName').innerText = verifyData.corpName || biznoCorpName;
-        document.getElementById('res-ceoNm').innerText = verifyData.ceoNm || '정보없음';
-        document.getElementById('res-bizno').innerText = verifyData.bizno || biznoBizno;
-        document.getElementById('res-crno').innerText = verifyData.crno || '정보없음';
-        document.getElementById('res-phone').innerText = verifyData.phone || '정보없음';
-        document.getElementById('res-address').innerText = verifyData.address || '정보없음';
-        document.getElementById('res-status').innerText = verifyData.status || '조회 결과 없음';
-
-        document.getElementById('resultCount').innerText =
-            `전체 검색 결과 ${biznoData.totalCount ?? itemList.length}건 / 반환 결과 ${itemList.length}건`;
-
-        if (resultBox) resultBox.style.display = 'block';
-
     } catch (error) {
         console.error("조회 오류:", error);
         if (errorMessage) {
-            errorMessage.innerText = "조회 중 오류가 발생했습니다.\n\n" + error.message;
+            errorMessage.innerText = error.message;
             errorMessage.style.display = 'block';
         }
     } finally {
@@ -304,23 +292,85 @@ async function searchCorp() {
     }
 }
 
+// 후보 리스트 렌더링
+function renderCandidates(candidates) {
+    const candidateBox = document.getElementById('candidateBox');
+    const candidateList = document.getElementById('candidateList');
+    candidateList.innerHTML = '';
+
+    candidates.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'candidate-card';
+        card.innerHTML = `
+            <div class="candidate-header">
+                <span class="candidate-name">${item.corpName}</span>
+                <span class="candidate-status">${item.status}</span>
+            </div>
+            <div class="candidate-sub">📌 사업자번호: ${item.bizno} | 📞 ${item.phone}</div>
+            <div class="candidate-sub">📍 주소: ${item.address}</div>
+        `;
+        card.onclick = () => selectCandidate(item);
+        candidateList.appendChild(card);
+    });
+
+    candidateBox.style.display = 'block';
+}
+
+// [2단계] 사용자가 특정 기업 선택 시 국민연금 주소 연동 및 최종결과 출력
+async function selectCandidate(item) {
+    const loading = document.getElementById('loading');
+    const resultBox = document.getElementById('resultBox');
+    const candidateBox = document.getElementById('candidateBox');
+    const errorMessage = document.getElementById('errorMessage');
+
+    if (candidateBox) candidateBox.style.display = 'none';
+    if (loading) loading.style.display = 'block';
+
+    try {
+        const params = new URLSearchParams({
+            corpName: item.corpName,
+            bizno: item.rawBizno || item.bizno,
+            address: item.address,
+            phone: item.phone,
+            status: item.status
+        });
+
+        const res = await fetch(`/api/search?${params.toString()}`);
+        const data = await res.json();
+
+        if (!res.ok || data.success === false) {
+            throw new Error(data.error || "상세 주소 조회 중 오류가 발생했습니다.");
+        }
+
+        // 최종 결과 화면 반영
+        document.getElementById('res-corpName').innerText = data.corpName;
+        document.getElementById('res-bizno').innerText = data.bizno;
+        document.getElementById('res-phone').innerText = data.phone;
+        document.getElementById('res-status').innerText = data.status;
+        document.getElementById('res-address').innerText = data.address;
+        document.getElementById('res-addrSource').innerText = data.addressSource ? `${data.addressSource} 주소` : '';
+
+        if (resultBox) resultBox.style.display = 'block';
+
+    } catch (error) {
+        if (errorMessage) {
+            errorMessage.innerText = error.message;
+            errorMessage.style.display = 'block';
+        }
+    } finally {
+        if (loading) loading.style.display = 'none';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const searchButton = document.getElementById('searchButton');
-    if (searchButton) {
-        searchButton.addEventListener('click', searchCorp);
-    }
+    if (searchButton) searchButton.addEventListener('click', searchCorp);
 
-    const corpNameInput = document.getElementById('corpName');
-    if (corpNameInput) {
-        corpNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
-    }
-
-    const addressInput = document.getElementById('address');
-    if (addressInput) {
-        addressInput.addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
-    }
+    ['corpName', 'address'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
+    });
 });
 </script>
-
 </body>
 </html>
