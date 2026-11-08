@@ -4,14 +4,12 @@ export default async function handler(req, res) {
     }
 
     const corpName = String(req.query.corpName || "").trim();
-    const queryBizno = String(req.query.bizno || "").trim();
-    const queryAddress = String(req.query.address || "").trim();
+    const detailUrl = String(req.query.detailUrl || "").trim();
 
-    if (!corpName && !queryBizno) {
-        return res.status(400).json({ success: false, error: "상호명이나 사업자등록번호가 전달되지 않았습니다." });
+    if (!corpName && !detailUrl) {
+        return res.status(400).json({ success: false, error: "상호명이나 상세 URL이 전달되지 않았습니다." });
     }
 
-    const biznoApiKey = process.env.BIZNO_API_KEY;
     const npsApiKey = process.env.DATA_GO_KR_API_KEY || process.env.NPS_API_KEY;
 
     function formatBizNo(value) {
@@ -20,135 +18,250 @@ export default async function handler(req, res) {
         return number.replace(/^(\d{3})(\d{2})(\d{5})$/, "$1-$2-$3");
     }
 
-    function normalize(value) {
-        return String(value || "")
-            .replace(/주식회사|㈜|\(주\)|주\)/g, "")
-            .replace(/\s/g, "")
-            .replace(/[()（）]/g, "")
-            .toLowerCase();
-    }
+    // =========================================================
+    // [2단계 & 3단계] 사용자가 선택한 기업 상세 페이지 파싱 + 국민연금 주소 연동
+    // =========================================================
+    if (detailUrl) {
+        try {
+            // 비즈노 상세 페이지 HTML 크롤링
+            const biznoDetail = await fetchAndParseBiznoDetail(detailUrl, corpName);
+            const cleanBizno = biznoDetail.bizno.replace(/\D/g, "");
 
-    try {
-        // =========================================================
-        // [1단계] 비즈노 API로 상호 검색 및 사업자번호/기본정보 확보
-        // =========================================================
-        if (!queryBizno) {
-            if (!biznoApiKey) {
-                return res.status(500).json({ success: false, error: "BIZNO_API_KEY가 설정되지 않았습니다." });
+            let finalAddress = biznoDetail.address;
+            let addressSource = "비즈노";
+
+            // 국민연금공단 API 조회 (비즈노에서 확보한 사업자번호 기준)
+            if (npsApiKey && cleanBizno.length >= 6) {
+                try {
+                    const npsUrl = "http://apis.data.go.kr/B552015/NpsBplcInfoInqireServiceV2/getBassInfoSearchV2";
+                    const params = new URLSearchParams({
+                        serviceKey: npsApiKey,
+                        bzowrRgstNo: cleanBizno.substring(0, 6),
+                        wkplNm: corpName,
+                        dataType: "json",
+                        pageNo: "1",
+                        numOfRows: "10"
+                    });
+
+                    const npsRes = await fetch(`${npsUrl}?${params.toString()}`);
+                    if (npsRes.ok) {
+                        const npsData = await npsRes.json();
+                        const items = npsData?.response?.body?.items?.item;
+                        let npsList = Array.isArray(items) ? items : (items ? [items] : []);
+
+                        const matched = npsList.find(n => {
+                            const nBiz = String(n.bzowrRgstNo || "").replace(/\D/g, "");
+                            return cleanBizno.startsWith(nBiz.replace(/\*/g, ""));
+                        }) || npsList[0];
+
+                        if (matched && matched.wkplRoadNmDtlAddr) {
+                            finalAddress = matched.wkplRoadNmDtlAddr;
+                            addressSource = "국민연금";
+                        }
+                    }
+                } catch (e) {
+                    console.warn("국민연금 API 조회 실패, 비즈노 주소 유지:", e.message);
+                }
             }
-
-            const biznoUrl = `https://bizno.net/api/fapi?key=${encodeURIComponent(biznoApiKey)}&gb=3&q=${encodeURIComponent(corpName)}&type=json`;
-            const biznoRes = await fetch(biznoUrl);
-
-            if (!biznoRes.ok) {
-                throw new Error(`비즈노 API 통신 실패 (HTTP ${biznoRes.status})`);
-            }
-
-            const biznoData = await biznoRes.json();
-            if (biznoData.resultCode !== 0 && biznoData.resultCode !== "0") {
-                return res.status(404).json({ success: false, error: biznoData.resultMsg || "비즈노 검색 결과가 없습니다." });
-            }
-
-            const rawItems = biznoData.items;
-            let itemList = [];
-            if (Array.isArray(rawItems)) {
-                itemList = rawItems.filter(item => item && typeof item === 'object');
-            } else if (rawItems && typeof rawItems === 'object') {
-                itemList = [rawItems];
-            }
-
-            if (itemList.length === 0) {
-                return res.status(404).json({ success: false, error: "해당 상호명으로 등록된 기업정보가 비즈노에 없습니다." });
-            }
-
-            const searchName = normalize(corpName);
-            const candidates = itemList.map(item => {
-                const name = item.company || item.name || corpName;
-                const bno = item.bno || "";
-                const addr = item.address || item.addr || "비즈노 주소 없음";
-                const status = item.bstt || item.status || "계속사업자";
-                const phone = item.tel || item.phone || "정보없음";
-
-                let score = 0;
-                if (normalize(name) === searchName) score += 100;
-                if (queryAddress && addr.includes(queryAddress)) score += 50;
-
-                return {
-                    corpName: name,
-                    bizno: formatBizNo(bno),
-                    rawBizno: bno.replace(/\D/g, ""),
-                    address: addr,
-                    status: status,
-                    phone: phone,
-                    score: score
-                };
-            }).sort((a, b) => b.score - a.score);
 
             return res.status(200).json({
                 success: true,
+                mode: "detail",
+                corpName: corpName,
+                bizno: formatBizNo(cleanBizno),
+                ceo: biznoDetail.ceo,
+                phone: biznoDetail.phone,
+                status: biznoDetail.status,
+                address: finalAddress,
+                addressSource: addressSource
+            });
+
+        } catch (e) {
+            return res.status(500).json({ success: false, error: "상세 정보 파싱 실패: " + e.message });
+        }
+    }
+
+    // =========================================================
+    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱 (앱스크립트 searchBiznoKeyword 동일 로직)
+    // =========================================================
+    try {
+        const searchUrl = "https://bizno.net/?query=" + encodeURIComponent(corpName);
+        const response = await fetch(searchUrl, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+        });
+        const html = await response.text();
+
+        if (html.includes("검색결과가 없습니다") || html.includes("조회된 데이터가 없습니다")) {
+            return res.status(200).json({
+                success: true,
                 mode: "list",
-                count: candidates.length,
-                candidates: candidates
+                candidates: [{
+                    name: corpName,
+                    ceo: "-",
+                    status: "-",
+                    address: "검색 결과 없음",
+                    phone: "-",
+                    detailUrl: "",
+                    isMultiple: false
+                }]
             });
         }
 
-        // =========================================================
-        // [2단계] 확보한 사업자번호로 국민연금공단 API 주소 조회 + Fallback 적용
-        // =========================================================
-        const cleanBizno = queryBizno.replace(/\D/g, "");
-        let finalAddress = queryAddress || "비즈노 주소 없음";
-        let addressSource = "비즈노";
+        let items = [];
+        const rawSplits = html.split('class="titles"');
+        if (rawSplits.length > 1) {
+            for (let k = 1; k < rawSplits.length; k++) {
+                if (rawSplits[k].includes('href') || rawSplits[k].includes('주소')) {
+                    items.push(rawSplits[k]);
+                }
+            }
+        }
 
-        if (npsApiKey && cleanBizno.length >= 6) {
-            try {
-                const npsUrl = "http://apis.data.go.kr/B552015/NpsBplcInfoInqireServiceV2/getBassInfoSearchV2";
-                const params = new URLSearchParams({
-                    serviceKey: npsApiKey,
-                    bzowrRgstNo: cleanBizno.substring(0, 6), // 앞 6자리 대조
-                    wkplNm: corpName,
-                    dataType: "json",
-                    pageNo: "1",
-                    numOfRows: "10"
-                });
+        if (items.length === 0) {
+            const rawList = html.split('class="list-item"');
+            for (let l = 1; l < rawList.length; l++) {
+                items.push(rawList[l]);
+            }
+        }
 
-                const npsRes = await fetch(`${npsUrl}?${params.toString()}`);
-                if (npsRes.ok) {
-                    const npsData = await npsRes.json();
-                    const items = npsData?.response?.body?.items?.item;
-                    let npsList = Array.isArray(items) ? items : (items ? [items] : []);
+        let results = [];
 
-                    const matched = npsList.find(n => {
-                        const nBiz = String(n.bzowrRgstNo || "").replace(/\D/g, "");
-                        return cleanBizno.startsWith(nBiz.replace(/\*/g, ""));
-                    }) || npsList[0];
+        if (items.length === 0) {
+            const directParsed = await fetchAndParseBiznoDetail(searchUrl, corpName);
+            results.push({
+                name: corpName,
+                ceo: directParsed.ceo,
+                status: directParsed.status,
+                address: directParsed.address,
+                phone: directParsed.phone,
+                detailUrl: searchUrl,
+                isMultiple: false
+            });
+        } else {
+            for (let i = 0; i < items.length && i < 10; i++) {
+                const itemHtml = items[i];
 
-                    // 국민연금공단 주소가 있으면 우선 적용, 없으면 기존 비즈노 주소 유지
-                    if (matched && matched.wkplRoadNmDtlAddr) {
-                        finalAddress = matched.wkplRoadNmDtlAddr;
-                        addressSource = "국민연금공단";
+                const titleMatch = itemHtml.match(/<a[^>]*>([^<]+)<\/a>/);
+                let compName = titleMatch ? titleMatch[1].trim() : corpName;
+
+                if (!compName || compName.includes("사업자등록번호") || compName.includes("HOME") || compName.length < 2) {
+                    compName = corpName;
+                }
+
+                const linkMatch = itemHtml.match(/href="([^"]+)"/);
+                let link = linkMatch ? linkMatch[1] : null;
+                if (link && !link.startsWith('http')) {
+                    link = "https://bizno.net" + link;
+                }
+
+                const textOnly = itemHtml.replace(/<\/?[^>]+(>|$)/g, ' ');
+                const fullClean = textOnly.replace(/\s+/g, ' ');
+
+                let status = "계속사업자";
+                if (fullClean.includes("폐업")) status = "폐업자";
+                else if (fullClean.includes("휴업")) status = "휴업자";
+
+                let ceoMasked = "-";
+                const lines = textOnly.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                for (let n = 0; n < lines.length; n++) {
+                    const l = lines[n];
+                    if ((l.includes('*') && l.length >= 2 && l.length <= 6) || /^[가-힣]{2,4}[\*]?$/.test(l)) {
+                        if (l !== compName && !l.includes('시') && !l.includes('구') && !l.includes('동') && !l.includes('로') && !l.includes('주식회사')) {
+                            ceoMasked = l;
+                            break;
+                        }
                     }
                 }
-            } catch (e) {
-                console.warn("국민연금공단 API 조회 실패, 비즈노 주소 사용:", e.message);
+
+                let simpleAddr = "소재지 확인 요망";
+                const addrMatch = fullClean.match(/((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리]+)/);
+                if (addrMatch) {
+                    simpleAddr = addrMatch[1].trim();
+                }
+
+                results.push({
+                    name: compName,
+                    ceo: ceoMasked,
+                    status: status,
+                    address: simpleAddr,
+                    phone: "-",
+                    detailUrl: link,
+                    isMultiple: true
+                });
             }
         }
 
         return res.status(200).json({
             success: true,
-            mode: "detail",
-            corpName: corpName,
-            bizno: formatBizNo(cleanBizno),
-            phone: req.query.phone || "정보없음",
-            status: req.query.status || "계속사업자",
-            address: finalAddress,
-            addressSource: addressSource,
-            source: `비즈노 + ${addressSource}`
+            mode: "list",
+            candidates: results
         });
 
     } catch (error) {
-        return res.status(500).json({
-            success: false,
-            error: "서버 처리 중 오류 발생: " + error.message
+        return res.status(500).json({ success: false, error: "검색 중 오류 발생: " + error.message });
+    }
+}
+
+// 비즈노 상세 페이지 HTML 파싱 (사업자번호, 대표자, 주소, 전화번호 추출)
+async function fetchAndParseBiznoDetail(url, defaultName) {
+    try {
+        const response = await fetch(url, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
         });
+        const html = await response.text();
+
+        const textOnly = html.replace(/<br\s*[\/]?>/gi, '\n').replace(/<\/?[^>]+(>|$)/g, ' ');
+        const lines = textOnly.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const fullTextClean = textOnly.replace(/\s+/g, ' ');
+
+        let ceo = "-";
+        let address = "미기재";
+        let phone = "미기재";
+        let status = "계속사업자";
+        let bizno = "";
+
+        if (fullTextClean.includes("계속사업자")) {
+            status = "계속사업자";
+        } else if (fullTextClean.includes("폐업자") || (fullTextClean.includes("폐업") && !fullTextClean.includes("계속사업자"))) {
+            status = "폐업자";
+        } else if (fullTextClean.includes("휴업")) {
+            status = "휴업자";
+        }
+
+        // 사업자등록번호 파싱
+        const biznoMatch = fullTextClean.match(/(\d{3}-\d{2}-\d{5})/);
+        if (biznoMatch) {
+            bizno = biznoMatch[1];
+        }
+
+        // 전화번호 파싱
+        const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
+        if (phoneMatch) {
+            phone = phoneMatch[1];
+        }
+
+        // 주소 파싱
+        const addrRegex = /((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지))/;
+        const aMatch = fullTextClean.match(addrRegex);
+        if (aMatch) {
+            address = aMatch[1].trim();
+        }
+
+        // 대표자 파싱
+        for (let j = 0; j < lines.length; j++) {
+            const l = lines[j];
+            if ((l.includes('*') && l.length >= 2 && l.length <= 6) || /^[가-힣]{2,4}[\*]?$/.test(l)) {
+                if (l !== defaultName && !l.includes('시') && !l.includes('구') && !l.includes('동') && !l.includes('로') && !l.includes('주식회사')) {
+                    ceo = l;
+                    break;
+                }
+            }
+        }
+
+        return { bizno, ceo, status, address, phone };
+    } catch (e) {
+        return { bizno: "", ceo: "-", status: "계속사업자", address: "상세조회 실패", phone: "-" };
     }
 }
