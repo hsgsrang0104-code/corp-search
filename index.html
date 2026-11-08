@@ -1,208 +1,307 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>기업 정보 조회 시스템</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; background: #f8f9fa; color: #333; margin: 0; }
-    h2 { font-size: 1.2rem; margin-bottom: 15px; color: #1a365d; text-align: center; }
-    .form-group { margin-bottom: 12px; }
-    label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #4a5568; }
-    textarea, input { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; background: #fff; }
-    textarea { height: 100px; }
-    button { width: 100%; padding: 14px; background: #2b6cb0; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; margin-top: 10px; cursor: pointer; }
-    button:hover { background: #1a365d; }
-    button:disabled { background: #adb5bd; cursor: not-allowed; }
-    #loader { display: none; text-align: center; margin-top: 15px; font-weight: bold; color: #2b6cb0; font-size: 14px; }
-    
-    .modal { background: #fff; border: 2px solid #2b6cb0; border-radius: 8px; padding: 15px; margin-top: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    .card-item { border: 1px solid #ced4da; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #ffffff; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .card-item:hover { background: #f1f3f5; border-color: #2b6cb0; }
-    .card-title { font-weight: bold; color: #1a365d; font-size: 16px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
-    .card-info { font-size: 13px; color: #333; margin-top: 3px; line-height: 1.4; word-break: break-all; }
-    .badge { display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: bold; border-radius: 4px; background: #e2e3e5; color: #383d41; }
-    .badge-active { background: #d4edda; color: #155724; }
-    .badge-closed { background: #f8d7da; color: #721c24; }
-  
-    .result-container { margin-top: 20px; background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #ced4da; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
-    th, td { border: 1px solid #dee2e6; padding: 6px; text-align: left; word-break: break-all; }
-    th { background: #e9ecef; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>기업 정보 조회 시스템</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 15px;
+            color: #333;
+        }
+        .container {
+            max-width: 750px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        h2 {
+            text-align: center;
+            color: #1a365d;
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+        .form-group { margin-bottom: 15px; }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+            color: #4a5568;
+            font-size: 13px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #2b6cb0;
+            box-shadow: 0 0 0 2px rgba(43,108,176,0.12);
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #2b6cb0;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        button:hover { background-color: #1a365d; }
+        button:disabled { background-color: #adb5bd; cursor: not-allowed; }
+        .loading {
+            text-align: center;
+            color: #2b6cb0;
+            margin-top: 15px;
+            display: none;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .candidate-box { margin-top: 20px; display: none; }
+        .candidate-title { font-size: 13px; font-weight: bold; color: #4a5568; margin-bottom: 10px; }
+        .candidate-card {
+            background: #fff;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .candidate-card:hover { border-color: #2b6cb0; background-color: #f1f3f5; }
+        .candidate-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .candidate-name { font-weight: bold; font-size: 16px; color: #1a365d; }
+        .badge { display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: bold; border-radius: 4px; background: #e2e3e5; color: #383d41; }
+        .badge-active { background: #d4edda; color: #155724; }
+        .badge-closed { background: #f8d7da; color: #721c24; }
+        .candidate-sub { font-size: 13px; color: #555; margin-top: 3px; word-break: break-all; }
+
+        .result-container { margin-top: 20px; background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #ced4da; display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+        th, td { border: 1px solid #dee2e6; padding: 6px; text-align: left; word-break: break-all; }
+        th { background: #e9ecef; }
+        .badge-source { font-size: 10px; background: #ebf8ff; color: #2b6cb0; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }
+        .error-message {
+            display: none;
+            margin-top: 15px;
+            padding: 12px;
+            background: #fff5f5;
+            border: 1px solid #feb2b2;
+            border-radius: 6px;
+            color: #c53030;
+            font-size: 13px;
+            word-break: break-word;
+        }
+        .help-text { color: #718096; font-size: 12px; margin-top: 5px; }
+    </style>
 </head>
 <body>
-  
-  <h2>🏢 기업 정보 조회 시스템</h2>
-  
-  <div class="form-group">
-    <label>상호명 입력 (한 줄에 하나씩, 최대 50개)</label>
-    <textarea id="companyList" placeholder="예시:&#10;탑안전공사"></textarea>
-  </div>
-  
-  <button id="searchBtn" onclick="startProcess()">조회 및 검증 시작</button>
-  
-  <div id="loader">정보를 조회하고 검증 중입니다...</div>
-  <div id="selectionArea"></div>
-  <div id="finalResultArea"></div>
-  
-  <script>
-    var pendingQueue = [];
-    var finalizedResults = [];
-  
-    function startProcess() {
-      var text = document.getElementById('companyList').value.trim();
-      if (!text) {
-        alert('상호명을 입력해주세요.');
+    
+<div class="container">
+    <h2>🏢 기업 정보 조회 시스템</h2>
+    
+    <div class="form-group">
+        <label for="corpName">상호명 *필수</label>
+        <input type="text" id="corpName" placeholder="예: 탑안전공사" autocomplete="organization">
+    </div>
+    
+    <div class="form-group">
+        <label for="address">소재지 / 주소 (선택)</label>
+        <input type="text" id="address" placeholder="예: 대전 서구">
+        <div class="help-text">동명 기업이 여러 곳일 경우 검색 필터링에 활용합니다.</div>
+    </div>
+    
+    <button id="searchButton" type="button">조회하기</button>
+    
+    <div class="loading" id="loading">기업 정보를 검색하고 있습니다...</div>
+    <div class="error-message" id="errorMessage"></div>
+    
+    <!-- 후보 기업 선택 리스트 -->
+    <div class="candidate-box" id="candidateBox">
+        <div class="candidate-title">⚠️ 동명이인 / 복수 결과 발견. 원하는 기업을 선택해 주세요:</div>
+        <div id="candidateList"></div>
+    </div>
+
+    <!-- 최종 결과 출력 표 -->
+    <div class="result-container" id="resultBox">
+        <div style="font-weight: bold; color: #1a365d; margin-bottom: 5px;">✅ 조회 완료 결과</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>상호명</th>
+                    <th>주소</th>
+                    <th>전화번호</th>
+                    <th>상태</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><b id="res-corpName">-</b><br><span style="font-size:10px; color:#666;" id="res-bizno">-</span></td>
+                    <td><span id="res-address">-</span><span class="badge-source" id="res-addrSource"></span></td>
+                    <td id="res-phone">-</td>
+                    <td id="res-status">-</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+    
+<script>
+async function searchCorp() {
+    const corpNameInput = document.getElementById('corpName');
+    const addressInput = document.getElementById('address');
+    const loading = document.getElementById('loading');
+    const resultBox = document.getElementById('resultBox');
+    const candidateBox = document.getElementById('candidateBox');
+    const errorMessage = document.getElementById('errorMessage');
+    const searchButton = document.getElementById('searchButton');
+    
+    const corpName = corpNameInput ? corpNameInput.value.trim() : "";
+    const address = addressInput ? addressInput.value.trim() : "";
+    
+    if (!corpName) {
+        alert("상호명을 입력해 주세요.");
+        if (corpNameInput) corpNameInput.focus();
         return;
-      }
-  
-      var lines = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-      if (lines.length > 50) {
-        alert('1회 최대 50개까지만 입력 가능합니다.');
-        return;
-      }
-  
-      document.getElementById('searchBtn').disabled = true;
-      document.getElementById('loader').style.display = 'block';
-      document.getElementById('selectionArea').innerHTML = '';
-      document.getElementById('finalResultArea').innerHTML = '';
-  
-      pendingQueue = lines;
-      finalizedResults = [];
-      processNextKeyword();
     }
-  
-    async function processNextKeyword() {
-      if (pendingQueue.length === 0) {
-        document.getElementById('loader').style.display = 'none';
-        renderFinalTable();
-        document.getElementById('searchBtn').disabled = false;
-        document.getElementById('companyList').value = '';
-        return;
-      }
-  
-      var keyword = pendingQueue.shift();
-      document.getElementById('loader').innerHTML = '조회 중 (' + keyword + ') 남은 개수: ' + (pendingQueue.length + 1);
-  
-      try {
-        const res = await fetch(`/api/search?corpName=${encodeURIComponent(keyword)}`);
+    
+    if (resultBox) resultBox.style.display = 'none';
+    if (candidateBox) candidateBox.style.display = 'none';
+    if (errorMessage) {
+        errorMessage.style.display = 'none';
+        errorMessage.innerText = '';
+    }
+    
+    if (loading) loading.style.display = 'block';
+    if (searchButton) {
+        searchButton.disabled = true;
+        searchButton.innerText = '조회 중...';
+    }
+    
+    try {
+        const params = new URLSearchParams({ corpName, address });
+        const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
 
         if (!res.ok || data.success === false) {
-          throw new Error(data.error || "검색 실패");
+            throw new Error(data.error || "기업 정보 검색에 실패했습니다.");
         }
 
-        const candidates = data.candidates;
-        if (candidates.length === 1 && !candidates[0].isMultiple) {
-          finalizedResults.push(candidates[0]);
-          processNextKeyword();
-        } else {
-          document.getElementById('loader').style.display = 'none';
-          showSelectionModal(keyword, candidates);
+        if (data.mode === "list" && data.candidates) {
+            if (data.candidates.length === 1) {
+                await selectCandidate(data.candidates[0]);
+            } else {
+                renderCandidates(data.candidates);
+            }
         }
-      } catch (e) {
-        finalizedResults.push({
-          name: keyword,
-          ceo: "-",
-          status: "오류",
-          address: e.message,
-          phone: "-",
-          isMultiple: false
+    } catch (error) {
+        console.error("조회 오류:", error);
+        if (errorMessage) {
+            errorMessage.innerText = error.message;
+            errorMessage.style.display = 'block';
+        }
+    } finally {
+        if (loading) loading.style.display = 'none';
+        if (searchButton) {
+            searchButton.disabled = false;
+            searchButton.innerText = '조회하기';
+        }
+    }
+}
+
+function renderCandidates(candidates) {
+    const candidateBox = document.getElementById('candidateBox');
+    const candidateList = document.getElementById('candidateList');
+    candidateList.innerHTML = '';
+
+    candidates.forEach(item => {
+        const badgeClass = (item.status === '계속사업자') ? 'badge-active' : 'badge-closed';
+        const card = document.createElement('div');
+        card.className = 'candidate-card';
+        card.innerHTML = `
+            <div class="candidate-header">
+                <span class="candidate-name">${item.corpName}</span>
+                <span class="badge ${badgeClass}">${item.status}</span>
+            </div>
+            <div class="candidate-sub"><b>사업자번호:</b> ${item.bizno} | <b>전화:</b> ${item.phone}</div>
+            <div class="candidate-sub"><b>주소:</b> ${item.address}</div>
+        `;
+        card.onclick = () => selectCandidate(item);
+        candidateList.appendChild(card);
+    });
+
+    candidateBox.style.display = 'block';
+}
+
+async function selectCandidate(item) {
+    const loading = document.getElementById('loading');
+    const resultBox = document.getElementById('resultBox');
+    const candidateBox = document.getElementById('candidateBox');
+    const errorMessage = document.getElementById('errorMessage');
+
+    if (candidateBox) candidateBox.style.display = 'none';
+    if (loading) {
+        loading.innerText = '선택하신 기업의 국민연금 주소를 조회 중입니다...';
+        loading.style.display = 'block';
+    }
+
+    try {
+        const params = new URLSearchParams({
+            corpName: item.corpName,
+            bizno: item.rawBizno || item.bizno,
+            address: item.address,
+            phone: item.phone,
+            status: item.status
         });
-        processNextKeyword();
-      }
-    }
-  
-    function showSelectionModal(keyword, results) {
-      var area = document.getElementById('selectionArea');
-      var html = `<div class="modal">
-                    <h3>⚠️ 동명이인 / 복수 결과</h3>
-                    <p style="font-size:12px; margin-bottom:10px; color:#555;">"${keyword}" (${results.length}건 발견) - 원하시는 기업을 터치해 주세요.</p>`;
-      
-      results.forEach(function(r) {
-        var badgeClass = (r.status === '계속사업자') ? 'badge-active' : 'badge-closed';
-        var encodedUrl = encodeURIComponent(r.detailUrl || '');
-        
-        html += `<div class="card-item" onclick="selectCompany('${r.name}', '${encodedUrl}')">
-                  <div class="card-title">${r.name} <span class="badge ${badgeClass}">${r.status}</span></div>
-                  <div class="card-info"><b>대표자:</b> ${r.ceo}</div>
-                  <div class="card-info"><b>전화번호:</b> ${r.phone}</div>
-                  <div class="card-info"><b>주소:</b> ${r.address}</div>
-                </div>`;
-      });
-  
-      html += `<button style="background:#6c757d; margin-top:10px;" onclick="skipCompany('${keyword}')">해당 건 건너뛰기(실패처리)</button>`;
-      html += '</div>';
-      
-      area.innerHTML = html;
-    }
-  
-    async function selectCompany(name, encodedUrl) {
-      var detailUrl = decodeURIComponent(encodedUrl);
-      document.getElementById('selectionArea').innerHTML = '';
-      document.getElementById('loader').innerHTML = '선택하신 기업의 상세 정보를 조회 중입니다...';
-      document.getElementById('loader').style.display = 'block';
-  
-      try {
-        const res = await fetch(`/api/search?corpName=${encodeURIComponent(name)}&detailUrl=${encodeURIComponent(detailUrl)}`);
+
+        const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
-        
-        if (res.ok && data.success) {
-          finalizedResults.push({
-            name: name,
-            ceo: data.result.ceo,
-            status: data.result.status,
-            address: data.result.address,
-            phone: data.result.phone
-          });
-        } else {
-          throw new Error(data.error || "상세 조회 실패");
-        }
-      } catch (e) {
-        finalizedResults.push({
-          name: name,
-          ceo: "-",
-          status: "조회실패",
-          address: e.message,
-          phone: "-"
-        });
-      }
 
-      document.getElementById('loader').style.display = 'block';
-      processNextKeyword();
+        if (!res.ok || data.success === false) {
+            throw new Error(data.error || "상세 주소 조회 중 오류가 발생했습니다.");
+        }
+
+        document.getElementById('res-corpName').innerText = data.corpName;
+        document.getElementById('res-bizno').innerText = data.bizno;
+        document.getElementById('res-phone').innerText = data.phone;
+        document.getElementById('res-status').innerText = data.status;
+        document.getElementById('res-address').innerText = data.address;
+        document.getElementById('res-addrSource').innerText = data.addressSource ? data.addressSource : '';
+
+        if (resultBox) resultBox.style.display = 'block';
+
+    } catch (error) {
+        if (errorMessage) {
+            errorMessage.innerText = error.message;
+            errorMessage.style.display = 'block';
+        }
+    } finally {
+        if (loading) loading.style.display = 'none';
     }
-  
-    function skipCompany(keyword) {
-      finalizedResults.push({
-        name: keyword,
-        ceo: "-",
-        status: "-",
-        address: "사용자 건너뜀",
-        phone: "-",
-        note: "선택안함"
-      });
-      document.getElementById('selectionArea').innerHTML = '';
-      document.getElementById('loader').style.display = 'block';
-      processNextKeyword();
-    }
-  
-    function renderFinalTable() {
-      var area = document.getElementById('finalResultArea');
-      var html = '<div class="result-container"><h3>✅ 조회 완료 결과</h3><table><thead><tr><th>상호명</th><th>주소</th><th>전화번호</th><th>상태</th></tr></thead><tbody>';
-      
-      finalizedResults.forEach(function(r) {
-        html += '<tr>' +
-                '<td><b>' + r.name + '</b></td>' +
-                '<td>' + r.address + '</td>' +
-                '<td>' + r.phone + '</td>' +
-                '<td>' + r.status + '</td>' +
-                '</tr>';
-      });
-      
-      html += '</tbody></table></div>';
-      area.innerHTML = html;
-    }
-  </script>
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const searchButton = document.getElementById('searchButton');
+    if (searchButton) searchButton.addEventListener('click', searchCorp);
+
+    ['corpName', 'address'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
+    });
+});
+</script>
 </body>
 </html>
