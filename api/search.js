@@ -218,7 +218,7 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
 
         let ceo = "-";
         let address = "미기재";
-        let phone = "번호없음"; // 기본값을 '번호없음'으로 설정
+        let phone = "번호없음";
         let status = "계속사업자";
         let bizno = "";
 
@@ -236,9 +236,7 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
             bizno = biznoMatch[1];
         }
 
-        // ==========================================
-        // 📞 전화번호 파싱 로직 (관할세무서 번호 혼입 차단)
-        // ==========================================
+        // 전화번호 파싱 (관할세무서 번호 혼입 차단 유지)
         const phoneLabelMatch = fullTextClean.match(/(?:전화|연락처|TEL)[\s:]*(\d{2,3}-\d{3,4}-\d{4})/i);
         
         if (phoneLabelMatch) {
@@ -257,11 +255,23 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
             }
         }
 
-        // 주소 파싱
-        const addrRegex = /((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지))/;
+        // ==========================================
+        // 🏠 주소 파싱 정규식 개선 (건물번호 및 괄호동 포함)
+        // ==========================================
+        const addrRegex = /((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:\d+)?(?:\s*\([가-힣\s0-9]+\))?)/;
         const aMatch = fullTextClean.match(addrRegex);
         if (aMatch) {
-            address = aMatch[1].trim();
+            // 뒤에 불필요한 단어가 길게 붙는 경우를 방지하기 위해 앞부분 위주로 정돈
+            let rawAddr = aMatch[1].trim();
+            // 전화번호나 사업자번호 등이 주소 뒤에 딸려 들어오는 경우 잘라내기 위한 후처리
+            const cutKeywords = ["사업자", "대표자", "업태", "종목", "전화", "관할세무서", "개업일자"];
+            for (const kw of cutKeywords) {
+                const idx = rawAddr.indexOf(kw);
+                if (idx !== -1) {
+                    rawAddr = rawAddr.substring(0, idx).trim();
+                }
+            }
+            address = rawAddr;
         }
 
         // 대표자 파싱
