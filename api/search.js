@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱
+    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱 (앱스크립트 searchBiznoKeyword 동일 로직)
     // =========================================================
     try {
         const searchUrl = "https://bizno.net/?query=" + encodeURIComponent(corpName);
@@ -236,42 +236,27 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
             bizno = biznoMatch[1];
         }
 
-        // 전화번호 파싱 (관할세무서 번호 혼입 차단 유지)
-        const phoneLabelMatch = fullTextClean.match(/(?:전화|연락처|TEL)[\s:]*(\d{2,3}-\d{3,4}-\d{4})/i);
-        
+        // 전화번호 파싱 (전화번호가 없거나 세무서 대표번호인 경우 번호없음 처리)
+        const phoneLabelMatch = html.match(/(?:전화|연락처|TEL)[\s\S]*?(\d{2,3}-\d{3,4}-\d{4})/i);
         if (phoneLabelMatch) {
             phone = phoneLabelMatch[1];
         } else {
-            const biznoPhoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
-            if (biznoPhoneMatch) {
-                const taxOfficeIndex = fullTextClean.indexOf("관할세무서");
-                const phoneIndex = fullTextClean.indexOf(biznoPhoneMatch[1]);
-                
-                if (taxOfficeIndex === -1 || phoneIndex < taxOfficeIndex) {
-                    phone = biznoPhoneMatch[1];
-                } else {
-                    phone = "번호없음";
+            // 명시적 라벨이 없고 페이지 내에 세무서 안내가 포함된 경우 관할세무서 번호 혼입 방지를 위해 번호없음 처리
+            if (fullTextClean.includes("관할세무서") || defaultName.includes("세무서")) {
+                phone = "번호없음";
+            } else {
+                const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
+                if (phoneMatch) {
+                    phone = phoneMatch[1];
                 }
             }
         }
 
-        // ==========================================
-        // 🏠 주소 파싱 정규식 개선 (건물번호 및 괄호동 포함)
-        // ==========================================
-        const addrRegex = /((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:\d+)?(?:\s*\([가-힣\s0-9]+\))?)/;
+        // 주소 파싱 (원래 사용하시던 정확한 주소 정규식 복원)
+        const addrRegex = /((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지))/;
         const aMatch = fullTextClean.match(addrRegex);
         if (aMatch) {
-            // 뒤에 불필요한 단어가 길게 붙는 경우를 방지하기 위해 앞부분 위주로 정돈
-            let rawAddr = aMatch[1].trim();
-            // 전화번호나 사업자번호 등이 주소 뒤에 딸려 들어오는 경우 잘라내기 위한 후처리
-            const cutKeywords = ["사업자", "대표자", "업태", "종목", "전화", "관할세무서", "개업일자"];
-            for (const kw of cutKeywords) {
-                const idx = rawAddr.indexOf(kw);
-                if (idx !== -1) {
-                    rawAddr = rawAddr.substring(0, idx).trim();
-                }
-            }
-            address = rawAddr;
+            address = aMatch[1].trim();
         }
 
         // 대표자 파싱
