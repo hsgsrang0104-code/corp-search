@@ -23,7 +23,6 @@ export default async function handler(req, res) {
     // =========================================================
     if (detailUrl) {
         try {
-            // 비즈노 상세 페이지 HTML 크롤링
             const biznoDetail = await fetchAndParseBiznoDetail(detailUrl, corpName);
             const cleanBizno = biznoDetail.bizno.replace(/\D/g, "");
 
@@ -54,9 +53,15 @@ export default async function handler(req, res) {
                             return cleanBizno.startsWith(nBiz.replace(/\*/g, ""));
                         }) || npsList[0];
 
-                        if (matched && matched.wkplRoadNmDtlAddr) {
-                            finalAddress = matched.wkplRoadNmDtlAddr;
-                            addressSource = "국민연금";
+                        // 기본 도로명 주소와 상세 주소를 안전하게 결합
+                        if (matched) {
+                            const roadAddr = matched.wkplRoadNmAddr || matched.wkplRoadNmDtlAddr || "";
+                            const dtlAddr = matched.wkplRoadNmDtlAddr && matched.wkplRoadNmAddr !== matched.wkplRoadNmDtlAddr ? matched.wkplRoadNmDtlAddr : "";
+                            
+                            if (roadAddr) {
+                                finalAddress = `${roadAddr} ${dtlAddr}`.trim();
+                                addressSource = "국민연금";
+                            }
                         }
                     }
                 } catch (e) {
@@ -82,7 +87,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱 (앱스크립트 searchBiznoKeyword 동일 로직)
+    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱
     // =========================================================
     try {
         const searchUrl = "https://bizno.net/?query=" + encodeURIComponent(corpName);
@@ -176,7 +181,7 @@ export default async function handler(req, res) {
                 }
 
                 let simpleAddr = "소재지 확인 요망";
-                const addrMatch = fullClean.match(/((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리]+)/);
+                const addrMatch = fullClean.match(/((?:서울|부산|대구|인천|광주|대전광역시|대전시|대전\s+[가-힣]+구|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리]+)/);
                 if (addrMatch) {
                     simpleAddr = addrMatch[1].trim();
                 }
@@ -218,7 +223,7 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
 
         let ceo = "-";
         let address = "미기재";
-        let phone = "미기재";
+        let phone = "번호없음";
         let status = "계속사업자";
         let bizno = "";
 
@@ -236,17 +241,43 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
             bizno = biznoMatch[1];
         }
 
-        // 전화번호 파싱
-        const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
-        if (phoneMatch) {
-            phone = phoneMatch[1];
+        // =========================================================
+        // 전화번호 파싱 (관할세무서 영역 이전의 번호 확인, 없으면 번호없음)
+        // =========================================================
+        const phoneLabelMatch = fullTextClean.match(/(?:전화|연락처|TEL)[\s:]*(\d{2,3}-\d{3,4}-\d{4})/i);
+        if (phoneLabelMatch) {
+            phone = phoneLabelMatch[1];
+        } else {
+            const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
+            if (phoneMatch) {
+                const taxOfficeIndex = fullTextClean.indexOf("관할세무서");
+                const phoneIndex = fullTextClean.indexOf(phoneMatch[1]);
+                
+                if (taxOfficeIndex !== -1 && phoneIndex > taxOfficeIndex) {
+                    phone = "번호없음";
+                } else {
+                    phone = phoneMatch[1];
+                }
+            } else {
+                phone = "번호없음";
+            }
         }
 
-        // 주소 파싱
-        const addrRegex = /((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지))/;
+        // =========================================================
+        // 주소 파싱 (상호명 내 '대전' 오인 방지 및 상세 주소 전체 수집)
+        // =========================================================
+        const addrRegex = /((?:서울|부산|대구|인천|광주|대전광역시|대전시|대전\s+[가-힣]+구|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지)?(?:\s*\d+)?(?:\s*\([가-힣\s0-9]+\))?)/;
         const aMatch = fullTextClean.match(addrRegex);
         if (aMatch) {
-            address = aMatch[1].trim();
+            let rawAddr = aMatch[1].trim();
+            const cutKeywords = ["직원수", "대표자", "업태", "종목", "전화", "관할세무서", "개업일자", "사업자등록번호", "기타 일반"];
+            for (const kw of cutKeywords) {
+                const idx = rawAddr.indexOf(kw);
+                if (idx !== -1) {
+                    rawAddr = rawAddr.substring(0, idx).trim();
+                }
+            }
+            address = rawAddr;
         }
 
         // 대표자 파싱
@@ -262,6 +293,6 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
 
         return { bizno, ceo, status, address, phone };
     } catch (e) {
-        return { bizno: "", ceo: "-", status: "계속사업자", address: "상세조회 실패", phone: "-" };
+        return { bizno: "", ceo: "-", status: "계속사업자", address: "상세조회 실패", phone: "번호없음" };
     }
 }
