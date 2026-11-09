@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱 (앱스크립트 searchBiznoKeyword 동일 로직)
+    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱
     // =========================================================
     try {
         const searchUrl = "https://bizno.net/?query=" + encodeURIComponent(corpName);
@@ -218,7 +218,7 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
 
         let ceo = "-";
         let address = "미기재";
-        let phone = "미기재";
+        let phone = "번호없음"; // 기본값을 '번호없음'으로 설정
         let status = "계속사업자";
         let bizno = "";
 
@@ -236,10 +236,25 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
             bizno = biznoMatch[1];
         }
 
-        // 전화번호 파싱
-        const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
-        if (phoneMatch) {
-            phone = phoneMatch[1];
+        // ==========================================
+        // 📞 전화번호 파싱 로직 (관할세무서 번호 혼입 차단)
+        // ==========================================
+        const phoneLabelMatch = fullTextClean.match(/(?:전화|연락처|TEL)[\s:]*(\d{2,3}-\d{3,4}-\d{4})/i);
+        
+        if (phoneLabelMatch) {
+            phone = phoneLabelMatch[1];
+        } else {
+            const biznoPhoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
+            if (biznoPhoneMatch) {
+                const taxOfficeIndex = fullTextClean.indexOf("관할세무서");
+                const phoneIndex = fullTextClean.indexOf(biznoPhoneMatch[1]);
+                
+                if (taxOfficeIndex === -1 || phoneIndex < taxOfficeIndex) {
+                    phone = biznoPhoneMatch[1];
+                } else {
+                    phone = "번호없음";
+                }
+            }
         }
 
         // 주소 파싱
@@ -262,6 +277,6 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
 
         return { bizno, ceo, status, address, phone };
     } catch (e) {
-        return { bizno: "", ceo: "-", status: "계속사업자", address: "상세조회 실패", phone: "-" };
+        return { bizno: "", ceo: "-", status: "계속사업자", address: "상세조회 실패", phone: "번호없음" };
     }
 }
