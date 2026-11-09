@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱 (사용자 원본 코드 100% 유지)
+    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱
     // =========================================================
     try {
         const searchUrl = "https://bizno.net/?query=" + encodeURIComponent(corpName);
@@ -176,7 +176,7 @@ export default async function handler(req, res) {
                 }
 
                 let simpleAddr = "소재지 확인 요망";
-                const addrMatch = fullClean.match(/((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리]+)/);
+                const addrMatch = fullClean.match(/((?:서울|부산|대구|인천|광주|대전광역시|대전시|대전\s+[가-힣]+구|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리]+)/);
                 if (addrMatch) {
                     simpleAddr = addrMatch[1].trim();
                 }
@@ -204,7 +204,7 @@ export default async function handler(req, res) {
     }
 }
 
-// 비즈노 상세 페이지 HTML 파싱 (사용자 원본 코드 구조 유지 + 전화번호/주소 정제)
+// 비즈노 상세 페이지 HTML 파싱 (사업자번호, 대표자, 주소, 전화번호 추출)
 async function fetchAndParseBiznoDetail(url, defaultName) {
     try {
         const response = await fetch(url, {
@@ -218,7 +218,7 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
 
         let ceo = "-";
         let address = "미기재";
-        let phone = "번호없음"; // 전화번호 없을 시 기본값
+        let phone = "번호없음";
         let status = "계속사업자";
         let bizno = "";
 
@@ -237,31 +237,35 @@ async function fetchAndParseBiznoDetail(url, defaultName) {
         }
 
         // =========================================================
-        // 전화번호 파싱 (사용자 원본 방식 + 세무서 등 관할 번호 혼입 방지 및 번호없음 처리)
+        // 전화번호 파싱 (기업 고유 번호 우선 추출, 세무서 안내 번호 혼입 방지)
         // =========================================================
-        const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
-        if (phoneMatch) {
-            const taxOfficeIndex = fullTextClean.indexOf("관할세무서");
-            const phoneIndex = fullTextClean.indexOf(phoneMatch[1]);
-            
-            // 세무서 안내 구역에 포함된 번호이거나 기관명이 세무서인 경우 번호없음 처리
-            if ((taxOfficeIndex !== -1 && phoneIndex > taxOfficeIndex) || defaultName.includes("세무서")) {
-                phone = "번호없음";
-            } else {
-                phone = phoneMatch[1];
-            }
+        const phoneLabelMatch = fullTextClean.match(/(?:전화|연락처|TEL)[\s:]*(\d{2,3}-\d{3,4}-\d{4})/i);
+        if (phoneLabelMatch) {
+            phone = phoneLabelMatch[1];
         } else {
-            phone = "번호없음";
+            const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
+            if (phoneMatch) {
+                const taxOfficeIndex = fullTextClean.indexOf("관할세무서");
+                const phoneIndex = fullTextClean.indexOf(phoneMatch[1]);
+                
+                // '관할세무서' 안내 구역보다 뒤에 나오는 번호는 세무서 번호이므로 제외
+                if (taxOfficeIndex !== -1 && phoneIndex > taxOfficeIndex) {
+                    phone = "번호없음";
+                } else {
+                    phone = phoneMatch[1];
+                }
+            } else {
+                phone = "번호없음";
+            }
         }
 
         // =========================================================
-        // 주소 파싱 (사용자 원본 주소 정규식에서 잘림 현상 방지 보완)
+        // 주소 파싱 (상호명 내의 '대전' 오인식 방지 및 전체 주소 수집)
         // =========================================================
-        const addrRegex = /((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지)?(?:\s*\d+)?(?:\s*\([가-힣\s0-9]+\))?)/;
+        const addrRegex = /((?:서울|부산|대구|인천|광주|대전광역시|대전시|대전\s+[가-힣]+구|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지)?(?:\s*\d+)?(?:\s*\([가-힣\s0-9]+\))?)/;
         const aMatch = fullTextClean.match(addrRegex);
         if (aMatch) {
             let rawAddr = aMatch[1].trim();
-            // 주소 뒤에 붙는 불필요한 메타 텍스트 제거
             const cutKeywords = ["직원수", "대표자", "업태", "종목", "전화", "관할세무서", "개업일자", "사업자등록번호", "기타 일반"];
             for (const kw of cutKeywords) {
                 const idx = rawAddr.indexOf(kw);
