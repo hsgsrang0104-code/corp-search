@@ -1,188 +1,298 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>기업 정보 조회 시스템</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; background: #f8f9fa; color: #333; margin: 0; }
-    h2 { font-size: 1.2rem; margin-bottom: 15px; color: #1a365d; text-align: center; }
-    .form-group { margin-bottom: 12px; }
-    label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #4a5568; }
-    input { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; background: #fff; }
-    button { width: 100%; padding: 14px; background: #2b6cb0; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; margin-top: 10px; cursor: pointer; }
-    button:hover { background: #1a365d; }
-    button:disabled { background: #adb5bd; cursor: not-allowed; }
-    #loader { display: none; text-align: center; margin-top: 15px; font-weight: bold; color: #2b6cb0; font-size: 14px; }
-    
-    .modal { background: #fff; border: 2px solid #2b6cb0; border-radius: 8px; padding: 15px; margin-top: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    .card-item { border: 1px solid #ced4da; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #ffffff; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .card-item:hover { background: #f1f3f5; border-color: #2b6cb0; }
-    .card-title { font-weight: bold; color: #1a365d; font-size: 16px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
-    .card-info { font-size: 13px; color: #333; margin-top: 3px; line-height: 1.4; word-break: break-all; }
-    .badge { display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: bold; border-radius: 4px; background: #e2e3e5; color: #383d41; }
-    .badge-active { background: #d4edda; color: #155724; }
-    .badge-closed { background: #f8d7da; color: #721c24; }
-    .badge-source { font-size: 10px; background: #ebf8ff; color: #2b6cb0; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }
-  
-    .result-container { margin-top: 20px; background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #ced4da; display: none; }
-    
-    /* 테이블 레이아웃 고정 및 주소 칸 줄바꿈 스타일 */
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; table-layout: fixed; }
-    th, td { border: 1px solid #dee2e6; padding: 6px; text-align: left; word-break: break-all; overflow-wrap: break-word; }
-    th { background: #e9ecef; }
-    td:nth-child(2) { width: 45%; word-break: keep-all; white-space: normal; } 
+export default async function handler(req, res) {
+    if (req.method !== "GET") {
+        return res.status(405).json({ success: false, error: "GET 요청만 허용됩니다." });
+    }
 
-    .error-message { display: none; margin-top: 15px; padding: 12px; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 6px; color: #c53030; font-size: 13px; }
-    .help-text { color: #718096; font-size: 12px; margin-top: 5px; }
-  </style>
-</head>
-<body>
-  
-  <h2>🏢 기업 정보 조회 시스템</h2>
-  
-  <div class="form-group">
-    <label for="corpName">상호명 *필수</label>
-    <input type="text" id="corpName" placeholder="예: 탑안전공사" autocomplete="organization">
-  </div>
+    const corpName = String(req.query.corpName || "").trim();
+    const detailUrl = String(req.query.detailUrl || "").trim();
 
-  <div class="form-group">
-    <label for="address">소재지 / 주소 (선택)</label>
-    <input type="text" id="address" placeholder="예: 대전 서구">
-    <div class="help-text">동명 기업이 여러 곳일 경우 구분에 활용합니다.</div>
-  </div>
-  
-  <button id="searchBtn" onclick="searchCorp()">조회하기</button>
-  
-  <div id="loader">비즈노에서 기업 정보를 검색 중입니다...</div>
-  <div class="error-message" id="errorMessage"></div>
+    if (!corpName && !detailUrl) {
+        return res.status(400).json({ success: false, error: "상호명이나 상세 URL이 전달되지 않았습니다." });
+    }
 
-  <!-- 동명이인/복수 선택 목록 -->
-  <div id="selectionArea"></div>
+    const npsApiKey = process.env.DATA_GO_KR_API_KEY || process.env.NPS_API_KEY;
 
-  <!-- 최종 결과 테이블 -->
-  <div class="result-container" id="resultBox">
-    <div style="font-weight: bold; color: #1a365d; margin-bottom: 5px;">✅ 조회 완료 결과</div>
-    <table>
-      <thead>
-        <tr>
-          <th>상호명</th>
-          <th>주소</th>
-          <th>전화번호</th>
-          <th>상태</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><b id="res-corpName">-</b><br><span style="font-size:10px; color:#666;" id="res-bizno">-</span></td>
-          <td><span id="res-address">-</span><span class="badge-source" id="res-addrSource"></span></td>
-          <td id="res-phone">-</td>
-          <td id="res-status">-</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  
-  <script>
-    async function searchCorp() {
-      const corpNameInput = document.getElementById('corpName');
-      const corpName = corpNameInput ? corpNameInput.value.trim() : "";
-      
-      if (!corpName) {
-        alert('상호명을 입력해 주세요.');
-        return;
-      }
-  
-      document.getElementById('searchBtn').disabled = true;
-      document.getElementById('loader').style.display = 'block';
-      document.getElementById('selectionArea').innerHTML = '';
-      document.getElementById('resultBox').style.display = 'none';
-      document.getElementById('errorMessage').style.display = 'none';
-  
-      try {
-        const res = await fetch(`/api/search?corpName=${encodeURIComponent(corpName)}`);
-        const data = await res.json();
+    function formatBizNo(value) {
+        const number = String(value || "").replace(/\D/g, "");
+        if (number.length !== 10) return value || "정보없음";
+        return number.replace(/^(\d{3})(\d{2})(\d{5})$/, "$1-$2-$3");
+    }
 
-        if (!res.ok || data.success === false) {
-          throw new Error(data.error || "검색 실패");
+    // =========================================================
+    // [2단계 & 3단계] 사용자가 선택한 기업 상세 페이지 파싱 + 국민연금 주소 연동
+    // =========================================================
+    if (detailUrl) {
+        try {
+            const biznoDetail = await fetchAndParseBiznoDetail(detailUrl, corpName);
+            const cleanBizno = biznoDetail.bizno.replace(/\D/g, "");
+
+            let finalAddress = biznoDetail.address;
+            let addressSource = "비즈노";
+
+            // 국민연금공단 API 조회 (3초 타임아웃 적용으로 Vercel 500 에러 방지)
+            if (npsApiKey && cleanBizno.length >= 6) {
+                try {
+                    const npsUrl = "http://apis.data.go.kr/B552015/NpsBplcInfoInqireServiceV2/getBassInfoSearchV2";
+                    const params = new URLSearchParams({
+                        serviceKey: npsApiKey,
+                        bzowrRgstNo: cleanBizno.substring(0, 6),
+                        wkplNm: corpName,
+                        dataType: "json",
+                        pageNo: "1",
+                        numOfRows: "10"
+                    });
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3초 초과 시 중단
+
+                    const npsRes = await fetch(`${npsUrl}?${params.toString()}`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+
+                    if (npsRes.ok) {
+                        const npsData = await npsRes.json();
+                        const items = npsData?.response?.body?.items?.item;
+                        let npsList = Array.isArray(items) ? items : (items ? [items] : []);
+
+                        const matched = npsList.find(n => {
+                            const nBiz = String(n.bzowrRgstNo || "").replace(/\D/g, "");
+                            return cleanBizno.startsWith(nBiz.replace(/\*/g, ""));
+                        }) || npsList[0];
+
+                        if (matched) {
+                            const roadAddr = matched.wkplRoadNmAddr || matched.wkplRoadNmDtlAddr || "";
+                            const dtlAddr = matched.wkplRoadNmDtlAddr && matched.wkplRoadNmAddr !== matched.wkplRoadNmDtlAddr ? matched.wkplRoadNmDtlAddr : "";
+                            
+                            if (roadAddr) {
+                                finalAddress = `${roadAddr} ${dtlAddr}`.trim();
+                                addressSource = "국민연금";
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn("국민연금 API 조회 시간 초과 또는 실패, 비즈노 주소 유지:", e.message);
+                }
+            }
+
+            return res.status(200).json({
+                success: true,
+                mode: "detail",
+                corpName: corpName,
+                bizno: formatBizNo(cleanBizno),
+                ceo: biznoDetail.ceo,
+                phone: biznoDetail.phone,
+                status: biznoDetail.status,
+                address: finalAddress,
+                addressSource: addressSource
+            });
+
+        } catch (e) {
+            return res.status(500).json({ success: false, error: "상세 정보 파싱 실패: " + e.message });
+        }
+    }
+
+    // =========================================================
+    // [1단계] 비즈노 첫 화면(검색 결과 목록) HTML 파싱
+    // =========================================================
+    try {
+        const searchUrl = "https://bizno.net/?query=" + encodeURIComponent(corpName);
+        const response = await fetch(searchUrl, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+        });
+        const html = await response.text();
+
+        if (html.includes("검색결과가 없습니다") || html.includes("조회된 데이터가 없습니다")) {
+            return res.status(200).json({
+                success: true,
+                mode: "list",
+                candidates: [{
+                    name: corpName,
+                    ceo: "-",
+                    status: "-",
+                    address: "검색 결과 없음",
+                    phone: "-",
+                    detailUrl: "",
+                    isMultiple: false
+                }]
+            });
         }
 
-        const candidates = data.candidates;
+        let items = [];
+        const rawSplits = html.split('class="titles"');
+        if (rawSplits.length > 1) {
+            for (let k = 1; k < rawSplits.length; k++) {
+                if (rawSplits[k].includes('href') || rawSplits[k].includes('주소')) {
+                    items.push(rawSplits[k]);
+                }
+            }
+        }
 
-        if (candidates.length === 1 && candidates[0].detailUrl) {
-          // 후보가 1개인 경우 바로 상세 파싱 수행
-          await selectCompany(candidates[0].name, encodeURIComponent(candidates[0].detailUrl));
-        } else if (candidates.length > 0) {
-          showSelectionModal(corpName, candidates);
+        if (items.length === 0) {
+            const rawList = html.split('class="list-item"');
+            for (let l = 1; l < rawList.length; l++) {
+                items.push(rawList[l]);
+            }
+        }
+
+        let results = [];
+
+        if (items.length === 0) {
+            const directParsed = await fetchAndParseBiznoDetail(searchUrl, corpName);
+            results.push({
+                name: corpName,
+                ceo: directParsed.ceo,
+                status: directParsed.status,
+                address: directParsed.address,
+                phone: directParsed.phone,
+                detailUrl: searchUrl,
+                isMultiple: false
+            });
         } else {
-          throw new Error("검색 결과가 없습니다.");
-        }
-      } catch (e) {
-        document.getElementById('errorMessage').innerText = e.message;
-        document.getElementById('errorMessage').style.display = 'block';
-      } finally {
-        document.getElementById('loader').style.display = 'none';
-        document.getElementById('searchBtn').disabled = false;
-      }
-    }
-  
-    function showSelectionModal(keyword, results) {
-      var area = document.getElementById('selectionArea');
-      var html = `<div class="modal">
-                    <h3>⚠️ 동명이인 / 복수 결과</h3>
-                    <p style="font-size:12px; margin-bottom:10px; color:#555;">"${keyword}" (${results.length}건 발견) - 원하시는 기업을 터치해 주세요.</p>`;
-      
-      results.forEach(function(r) {
-        var badgeClass = (r.status === '계속사업자') ? 'badge-active' : 'badge-closed';
-        var encodedUrl = encodeURIComponent(r.detailUrl || '');
-        
-        html += `<div class="card-item" onclick="selectCompany('${r.name}', '${encodedUrl}')">
-                  <div class="card-title">${r.name} <span class="badge ${badgeClass}">${r.status}</span></div>
-                  <div class="card-info"><b>대표자:</b> ${r.ceo}</div>
-                  <div class="card-info"><b>주소:</b> ${r.address}</div>
-                </div>`;
-      });
-  
-      html += '</div>';
-      area.innerHTML = html;
-    }
-  
-    async function selectCompany(name, encodedUrl) {
-      var detailUrl = decodeURIComponent(encodedUrl);
-      document.getElementById('selectionArea').innerHTML = '';
-      document.getElementById('loader').innerHTML = '비즈노 상세 페이지 및 국민연금 주소 조회 중...';
-      document.getElementById('loader').style.display = 'block';
-  
-      try {
-        const res = await fetch(`/api/search?corpName=${encodeURIComponent(name)}&detailUrl=${encodeURIComponent(detailUrl)}`);
-        const data = await res.json();
-        
-        if (res.ok && data.success) {
-          document.getElementById('res-corpName').innerText = data.corpName;
-          document.getElementById('res-bizno').innerText = data.bizno;
-          document.getElementById('res-phone').innerText = data.phone;
-          document.getElementById('res-status').innerText = data.status;
-          document.getElementById('res-address').innerText = data.address;
-          document.getElementById('res-addrSource').innerText = data.addressSource ? `${data.addressSource} 주소` : '';
+            for (let i = 0; i < items.length && i < 10; i++) {
+                const itemHtml = items[i];
 
-          document.getElementById('resultBox').style.display = 'block';
+                const titleMatch = itemHtml.match(/<a[^>]*>([^<]+)<\/a>/);
+                let compName = titleMatch ? titleMatch[1].trim() : corpName;
+
+                if (!compName || compName.includes("사업자등록번호") || compName.includes("HOME") || compName.length < 2) {
+                    compName = corpName;
+                }
+
+                const linkMatch = itemHtml.match(/href="([^"]+)"/);
+                let link = linkMatch ? linkMatch[1] : null;
+                if (link && !link.startsWith('http')) {
+                    link = "https://bizno.net" + link;
+                }
+
+                const textOnly = itemHtml.replace(/<\/?[^>]+(>|$)/g, ' ');
+                const fullClean = textOnly.replace(/\s+/g, ' ');
+
+                let status = "계속사업자";
+                if (fullClean.includes("폐업")) status = "폐업자";
+                else if (fullClean.includes("휴업")) status = "휴업자";
+
+                let ceoMasked = "-";
+                const lines = textOnly.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                for (let n = 0; n < lines.length; n++) {
+                    const l = lines[n];
+                    if ((l.includes('*') && l.length >= 2 && l.length <= 6) || /^[가-힣]{2,4}[\*]?$/.test(l)) {
+                        if (l !== compName && !l.includes('시') && !l.includes('구') && !l.includes('동') && !l.includes('로') && !l.includes('주식회사')) {
+                            ceoMasked = l;
+                            break;
+                        }
+                    }
+                }
+
+                let simpleAddr = "소재지 확인 요망";
+                const addrMatch = fullClean.match(/((?:서울|부산|대구|인천|광주|대전광역시|대전시|대전\s+[가-힣]+구|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리]+)/);
+                if (addrMatch) {
+                    simpleAddr = addrMatch[1].trim();
+                }
+
+                results.push({
+                    name: compName,
+                    ceo: ceoMasked,
+                    status: status,
+                    address: simpleAddr,
+                    phone: "-",
+                    detailUrl: link,
+                    isMultiple: true
+                });
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            mode: "list",
+            candidates: results
+        });
+
+    } catch (error) {
+        return res.status(500).json({ success: false, error: "검색 중 오류 발생: " + error.message });
+    }
+}
+
+// 비즈노 상세 페이지 HTML 파싱 (사업자번호, 대표자, 주소, 전화번호 추출)
+async function fetchAndParseBiznoDetail(url, defaultName) {
+    try {
+        const response = await fetch(url, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+        });
+        const html = await response.text();
+
+        const textOnly = html.replace(/<br\s*[\/]?>/gi, '\n').replace(/<\/?[^>]+(>|$)/g, ' ');
+        const lines = textOnly.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const fullTextClean = textOnly.replace(/\s+/g, ' ');
+
+        let ceo = "-";
+        let address = "미기재";
+        let phone = "번호없음";
+        let status = "계속사업자";
+        let bizno = "";
+
+        if (fullTextClean.includes("계속사업자")) {
+            status = "계속사업자";
+        } else if (fullTextClean.includes("폐업자") || (fullTextClean.includes("폐업") && !fullTextClean.includes("계속사업자"))) {
+            status = "폐업자";
+        } else if (fullTextClean.includes("휴업")) {
+            status = "휴업자";
+        }
+
+        // 사업자등록번호 파싱
+        const biznoMatch = fullTextClean.match(/(\d{3}-\d{2}-\d{5})/);
+        if (biznoMatch) {
+            bizno = biznoMatch[1];
+        }
+
+        // 전화번호 파싱 (관할세무서 영역 이전의 번호 확인, 없으면 번호없음)
+        const phoneLabelMatch = fullTextClean.match(/(?:전화|연락처|TEL)[\s:]*(\d{2,3}-\d{3,4}-\d{4})/i);
+        if (phoneLabelMatch) {
+            phone = phoneLabelMatch[1];
         } else {
-          throw new Error(data.error || "상세 정보 파싱 실패");
+            const phoneMatch = fullTextClean.match(/(\d{2,3}-\d{3,4}-\d{4})/);
+            if (phoneMatch) {
+                const taxOfficeIndex = fullTextClean.indexOf("관할세무서");
+                const phoneIndex = fullTextClean.indexOf(phoneMatch[1]);
+                
+                if (taxOfficeIndex !== -1 && phoneIndex > taxOfficeIndex) {
+                    phone = "번호없음";
+                } else {
+                    phone = phoneMatch[1];
+                }
+            } else {
+                phone = "번호없음";
+            }
         }
-      } catch (e) {
-        document.getElementById('errorMessage').innerText = e.message;
-        document.getElementById('errorMessage').style.display = 'block';
-      } finally {
-        document.getElementById('loader').style.display = 'none';
-      }
-    }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const corpNameInput = document.getElementById('corpName');
-      if (corpNameInput) {
-        corpNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') searchCorp(); });
-      }
-    });
-  </script>
-</body>
-</html>
+        // 주소 파싱
+        const addrRegex = /((?:서울|부산|대구|인천|광주|대전광역시|대전시|대전\s+[가-힣]+구|울산|세종|경기|강원|충청북|충청남|전라북|전라남|경상북|경상남|제주)[가-힣0-9\-\s\(\)\,\·로길읍면동리층호번지]+(?:로|길|동|읍|면|리|층|호|번지)?(?:\s*\d+)?(?:\s*\([가-힣\s0-9]+\))?)/;
+        const aMatch = fullTextClean.match(addrRegex);
+        if (aMatch) {
+            let rawAddr = aMatch[1].trim();
+            const cutKeywords = ["직원수", "대표자", "업태", "종목", "전화", "관할세무서", "개업일자", "사업자등록번호", "기타 일반"];
+            for (const kw of cutKeywords) {
+                const idx = rawAddr.indexOf(kw);
+                if (idx !== -1) {
+                    rawAddr = rawAddr.substring(0, idx).trim();
+                }
+            }
+            address = rawAddr;
+        }
+
+        // 대표자 파싱
+        for (let j = 0; j < lines.length; j++) {
+            const l = lines[j];
+            if ((l.includes('*') && l.length >= 2 && l.length <= 6) || /^[가-힣]{2,4}[\*]?$/.test(l)) {
+                if (l !== defaultName && !l.includes('시') && !l.includes('구') && !l.includes('동') && !l.includes('로') && !l.includes('주식회사')) {
+                    ceo = l;
+                    break;
+                }
+            }
+        }
+
+        return { bizno, ceo, status, address, phone };
+    } catch (e) {
+        return { bizno: "", ceo: "-", status: "계속사업자", address: "상세조회 실패", phone: "번호없음" };
+    }
+}
